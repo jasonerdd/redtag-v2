@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 # Red Tag System
 
-Django web app that replaces the Assembly Red Tag Report Excel workbook. Capture, store, search, close, and export red tag records on a local server with PostgreSQL.
+Django web app that replaces the Assembly Red Tag Report Excel workbook. Capture, store, search, close, and export red tag records on a local server with MySQL/MariaDB (XAMPP).
 
 ## Features
 
@@ -22,22 +21,32 @@ source venv/Scripts/activate   # Git Bash
 pip install -r requirements.txt
 ```
 
-2. Copy `.env` values for PostgreSQL (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, etc.).
+2. Start **Apache** and **MySQL** from the XAMPP Control Panel.
 
-3. Create the database (once):
+3. Create the database (once). In phpMyAdmin (http://localhost/phpmyadmin) click **New**, name it `redtag_db`, choose collation `utf8mb4_unicode_ci`, and click **Create**. Or from a terminal:
 
 ```bash
-psql -U postgres -c "CREATE DATABASE redtag_db;"
+C:/xampp/mysql/bin/mysql -u root -e "CREATE DATABASE redtag_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-4. Migrate and create an admin user:
+4. Create a `.env` file next to `manage.py` (XAMPP's default `root` user has no password):
+
+```ini
+DB_NAME=redtag_db
+DB_USER=root
+DB_PASSWORD=
+DB_HOST=127.0.0.1
+DB_PORT=3306
+```
+
+5. Migrate and create an admin user:
 
 ```bash
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
-5. Import Excel lookups + historical tags:
+6. Import Excel lookups + historical tags:
 
 ```bash
 python manage.py import_excel "Red Tag Report 2024.xlsx"
@@ -45,7 +54,7 @@ python manage.py import_excel "Red Tag Report 2024.xlsx"
 
 Use `--skip-tags` for lookups only, or `--limit 500` for a sample import.
 
-6. Run the app:
+7. Run the app:
 
 ```bash
 python manage.py runserver
@@ -57,7 +66,7 @@ Open http://127.0.0.1:8000/ and sign in.
 
 On the company server:
 
-1. Install Python 3.12+, PostgreSQL, and dependencies.
+1. Install Python 3.12+, MySQL/MariaDB (10.6+), and dependencies.
 2. Set `DEBUG=False` and a strong `SECRET_KEY` in `.env`.
 3. Set `ALLOWED_HOSTS` to the server hostname/IP.
 4. Collect static files: `python manage.py collectstatic`
@@ -81,6 +90,3 @@ On the company server:
 | Status (P/C) | status |
 | Closing Date / Cleared By | closing_date / verified_by |
 | Location (EOL/FINAL) | location |
-=======
-# redtag-project
->>>>>>> 54586409c90b7624187bc6d4303db7b09377ad29

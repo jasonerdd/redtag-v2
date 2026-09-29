@@ -223,7 +223,8 @@ class Command(BaseCommand):
             (s.section_id, s.name.upper()): s
             for s in Station.objects.select_related('section')
             if s.section_id
-        }        models = {m.name.upper(): m for m in VehicleModel.objects.all()}
+        }
+        models = {m.name.upper(): m for m in VehicleModel.objects.all()}
         dealers = {d.name.upper(): d for d in Dealer.objects.all()}
         vehicles = {v.chassis_no: v for v in Vehicle.objects.select_related('model')}
 
