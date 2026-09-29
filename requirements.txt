@@ -1,5 +1,5 @@
 Django>=5.0,<7
-mysqlclient>=2.2.1
+PyMySQL>=1.1
 python-decouple>=3.8
 django-import-export>=4.0
 openpyxl>=3.1
