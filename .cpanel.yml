@@ -1,5 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home3/avaco/repositories/redtag-v2
+    - export DEPLOYPATH=/home3/avaco/app.simbamarine.co.ke/redtag-v2
     - /bin/cp -R * $DEPLOYPATH
