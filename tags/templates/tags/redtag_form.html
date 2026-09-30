@@ -28,7 +28,7 @@
 {% block content %}
 <div class="mb-3">
   <h1 class="page-title">{% if object %}Edit red tag #{{ object.pk }}{% else %}New red tag{% endif %}</h1>
-  <p class="page-sub">Enter red tag data. Required fields are marked. Type in any dropdown to filter options.</p>
+  <p class="page-sub">Enter red tag data. Fill all the fields and click the save button to save the form.</p>
 </div>
 
 <div class="panel">
@@ -50,6 +50,11 @@
         {{ form.section.errors }}
       </div>
       <div class="col-md-4">
+        <label class="form-label" for="{{ form.station.id_for_label }}">Station <span class="text-danger">*</span></label>
+        {{ form.station }}
+        {{ form.station.errors }}
+      </div>
+      <div class="col-md-4">
         <label class="form-label" for="{{ form.model.id_for_label }}">Model <span class="text-danger">*</span></label>
         {{ form.model }}
         {{ form.model.errors }}
@@ -69,32 +74,27 @@
         {{ form.quantity }}
         {{ form.quantity.errors }}
       </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.category.id_for_label }}">Category <span class="text-danger">*</span></label>
+        {{ form.category }}
+        {{ form.category.errors }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.issue_type.id_for_label }}">Issue Type <span class="text-danger">*</span></label>
+        {{ form.issue_type }}
+        {{ form.issue_type.errors }}
+      </div>
       <div class="col-12">
         <label class="form-label" for="{{ form.issue_description.id_for_label }}">Issue Description <span class="text-danger">*</span></label>
         {{ form.issue_description }}
         {{ form.issue_description.errors }}
       </div>
       <div class="col-md-6">
-        <label class="form-label" for="{{ form.category.id_for_label }}">Category <span class="text-danger">*</span></label>
-        {{ form.category }}
-        {{ form.category.errors }}
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="{{ form.issue_type.id_for_label }}">Issue Type <span class="text-danger">*</span></label>
-        {{ form.issue_type }}
-        {{ form.issue_type.errors }}
-      </div>
-      <div class="col-md-4">
         <label class="form-label" for="{{ form.raised_by_employee_no.id_for_label }}">Raised By Staff ID <span class="text-danger">*</span></label>
         {{ form.raised_by_employee_no }}
         {{ form.raised_by_employee_no.errors }}
       </div>
-      <div class="col-md-4">
-        <label class="form-label" for="{{ form.station.id_for_label }}">Station <span class="text-danger">*</span></label>
-        {{ form.station }}
-        {{ form.station.errors }}
-      </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <label class="form-label" for="{{ form.status.id_for_label }}">Status <span class="text-danger">*</span></label>
         {{ form.status }}
         {{ form.status.errors }}

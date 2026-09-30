@@ -29,7 +29,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
     <h1 class="page-title">Red Tag History</h1>
-    <p class="page-sub mb-0">Units with red tags — open a unit to see all its issues</p>
+    <p class="page-sub mb-0">Units with red tags — view a unit to see all its issues</p>
   </div>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" href="{% url 'redtag-export' %}?{{ request.GET.urlencode }}">Export Excel</a>
@@ -39,27 +39,35 @@
 
 <div class="panel mb-3">
   <form method="get" class="row g-2 align-items-end">
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.status.id_for_label }}">Status</label>
       {{ filter_form.status }}
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.section.id_for_label }}">Section</label>
       {{ filter_form.section }}
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
+      <label class="form-label" for="{{ filter_form.station.id_for_label }}">Station</label>
+      {{ filter_form.station }}
+    </div>
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.model.id_for_label }}">Model</label>
       {{ filter_form.model }}
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
+      <label class="form-label" for="{{ filter_form.lot.id_for_label }}">Lot</label>
+      {{ filter_form.lot }}
+    </div>
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.chassis.id_for_label }}">Chassis</label>
       {{ filter_form.chassis }}
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.date_from.id_for_label }}">From</label>
       {{ filter_form.date_from }}
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.date_to.id_for_label }}">To</label>
       {{ filter_form.date_to }}
     </div>
@@ -194,7 +202,24 @@
   }
 
   enhanceSelect(document.getElementById('id_status'));
-  enhanceSelect(document.getElementById('id_section'));
+  const sectionTs = enhanceSelect(document.getElementById('id_section'));
+  const stationTs = enhanceSelect(document.getElementById('id_station'));
   enhanceSelect(document.getElementById('id_model'));
+
+  async function loadStations(sectionId) {
+    const query = sectionId ? `section_id=${sectionId}` : 'all=1';
+    const response = await fetch(`/ajax/load-stations/?${query}`);
+    const data = await response.json();
+    stationTs.clear(true);
+    stationTs.clearOptions();
+    stationTs.addOption({ value: '', text: PLACEHOLDER });
+    data.forEach(item => stationTs.addOption({ value: String(item.id), text: item.name }));
+    stationTs.refreshOptions(false);
+    stationTs.setValue('', true);
+  }
+
+  if (sectionTs && stationTs) {
+    sectionTs.on('change', (value) => loadStations(value));
+  }
 </script>
 {% endblock %}

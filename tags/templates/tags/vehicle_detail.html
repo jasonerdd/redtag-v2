@@ -3,7 +3,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
-    <h1 class="page-title">Chassis No: {{ unit.chassis_no }} | Model: {{ unit.model.name }} | Lot: {{ unit.lot }}</h1>
+    <h1 class="page-title">  {{ unit.model.name }} |  {{ unit.lot }} | {{ unit.chassis_no }}</h1>
     <p class="page-sub mb-0">
       
       {% if unit.dealer %} · {{ unit.dealer.name }}{% endif %}
@@ -21,7 +21,6 @@
     <table class="table table-hover align-middle mb-0">
       <thead>
         <tr>
-          <th>#</th>
           <th>Date</th>
           <th>Section</th>
           <th>Station</th>
@@ -36,7 +35,6 @@
       <tbody>
         {% for tag in redtags %}
         <tr>
-          <td>{{ tag.id }}</td>
           <td>{{ tag.date_raised }}</td>
           <td>{{ tag.section.code }}</td>
           <td>{{ tag.station.name|default:'—' }}</td>

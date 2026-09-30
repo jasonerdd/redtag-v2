@@ -1,12 +1,12 @@
 {% extends 'tags/base.html' %}
-{% block title %}Audit #{{ log.pk }} · Red Tag System{% endblock %}
+{% block title %}Entry Record #{{ log.pk }} · Red Tag System{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
-    <h1 class="page-title">Audit entry #{{ log.pk }}</h1>
+    <h1 class="page-title">Entry record #{{ log.pk }}</h1>
     <p class="page-sub mb-0">{{ log.get_action_display }} · {{ log.timestamp|date:"Y-m-d H:i:s" }}</p>
   </div>
-  <a href="{% url 'audit-list' %}" class="btn btn-outline-secondary">Back to audit trail</a>
+  <a href="{% url 'audit-list' %}" class="btn btn-outline-secondary">Back to entry records</a>
 </div>
 
 <div class="row g-3">

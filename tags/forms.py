@@ -194,11 +194,17 @@ class RedTagFilterForm(forms.Form):
         required=False,
         empty_label='Select an option',
     )
+    station = forms.ModelChoiceField(
+        queryset=Station.objects.filter(show_in_form=True).select_related('section'),
+        required=False,
+        empty_label='Select an option',
+    )
     model = forms.ModelChoiceField(
         queryset=VehicleModel.objects.all(),
         required=False,
         empty_label='Select an option',
     )
+    lot = forms.CharField(required=False, label='Lot')
     chassis = forms.CharField(required=False, label='Chassis No.')
     date_from = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
     date_to = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
@@ -208,3 +214,9 @@ class RedTagFilterForm(forms.Form):
         for field in self.fields.values():
             css = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
             field.widget.attrs.setdefault('class', css)
+
+        section_id = self.data.get('section') if self.is_bound else None
+        if section_id and section_id.isdigit():
+            self.fields['station'].queryset = self.fields['station'].queryset.filter(
+                section_id=section_id
+            )

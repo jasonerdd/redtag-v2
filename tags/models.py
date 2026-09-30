@@ -218,6 +218,7 @@ class AuditLog(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
     class Meta:
+        verbose_name = 'entry record'
         ordering = ['-timestamp', '-id']
         indexes = [
             models.Index(fields=['action']),

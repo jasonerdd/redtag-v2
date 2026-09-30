@@ -30,6 +30,7 @@ class VehicleListView(LoginRequiredMixin, ListView):
         tag_q = Q()
         status = self.request.GET.get('status')
         section = self.request.GET.get('section')
+        station = self.request.GET.get('station')
         model = self.request.GET.get('model')
         date_from = self.request.GET.get('date_from')
         date_to = self.request.GET.get('date_to')
@@ -38,6 +39,8 @@ class VehicleListView(LoginRequiredMixin, ListView):
             tag_q &= Q(red_tags__status=status)
         if section:
             tag_q &= Q(red_tags__section_id=section)
+        if station:
+            tag_q &= Q(red_tags__station_id=station)
         if model:
             tag_q &= Q(model_id=model)
         if date_from:
@@ -48,6 +51,7 @@ class VehicleListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         tag_q = self._tag_filter()
+        lot = self.request.GET.get('lot')
         chassis = self.request.GET.get('chassis')
         q = self.request.GET.get('q')
 
@@ -58,6 +62,8 @@ class VehicleListView(LoginRequiredMixin, ListView):
         else:
             qs = qs.filter(red_tags__isnull=False)
 
+        if lot:
+            qs = qs.filter(lot__icontains=lot)
         if chassis:
             qs = qs.filter(chassis_no__icontains=chassis)
         if q:
@@ -186,7 +192,9 @@ def export_redtags(request):
 
     status = request.GET.get('status')
     section = request.GET.get('section')
+    station = request.GET.get('station')
     model = request.GET.get('model')
+    lot = request.GET.get('lot')
     chassis = request.GET.get('chassis')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -195,8 +203,12 @@ def export_redtags(request):
         qs = qs.filter(status=status)
     if section:
         qs = qs.filter(section_id=section)
+    if station:
+        qs = qs.filter(station_id=station)
     if model:
         qs = qs.filter(vehicle__model_id=model)
+    if lot:
+        qs = qs.filter(vehicle__lot__icontains=lot)
     if chassis:
         qs = qs.filter(vehicle__chassis_no__icontains=chassis)
     if date_from:
@@ -252,6 +264,10 @@ def export_redtags(request):
 
 def load_stations(request):
     section_id = request.GET.get('section_id')
+    if request.GET.get('all') and not section_id:
+        stations = Station.objects.filter(show_in_form=True).select_related('section')
+        data = [{'id': s.id, 'name': str(s)} for s in stations]
+        return JsonResponse(data, safe=False)
     stations = Station.objects.filter(
         section_id=section_id, show_in_form=True
     ).order_by('name')
