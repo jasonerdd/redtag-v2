@@ -228,7 +228,8 @@
       setSelectOptions(stationSelect, [], null);
       return;
     }
-    const response = await fetch(`/ajax/load-stations/?section_id=${sectionId}`);
+    const include = initialStationId ? `&include=${initialStationId}` : '';
+    const response = await fetch(`/ajax/load-stations/?section_id=${sectionId}${include}`);
     const data = await response.json();
     setSelectOptions(stationSelect, data, selectedId);
   }

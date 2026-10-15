@@ -56,6 +56,10 @@
       {{ filter_form.model }}
     </div>
     <div class="col-md-3">
+      <label class="form-label" for="{{ filter_form.customer.id_for_label }}">Customer</label>
+      {{ filter_form.customer }}
+    </div>
+    <div class="col-md-3">
       <label class="form-label" for="{{ filter_form.lot.id_for_label }}">Lot</label>
       {{ filter_form.lot }}
     </div>
@@ -75,7 +79,7 @@
       <label class="form-label">Search</label>
       <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Chassis, model, lot, issue...">
     </div>
-    <div class="col-md-6 d-flex gap-2">
+    <div class="col-md-3 d-flex gap-2">
       <button class="btn btn-dark" type="submit">Apply filters</button>
       <a class="btn btn-outline-secondary" href="{% url 'redtag-list' %}">Reset</a>
     </div>
@@ -205,6 +209,7 @@
   const sectionTs = enhanceSelect(document.getElementById('id_section'));
   const stationTs = enhanceSelect(document.getElementById('id_station'));
   enhanceSelect(document.getElementById('id_model'));
+  enhanceSelect(document.getElementById('id_customer'));
 
   async function loadStations(sectionId) {
     const query = sectionId ? `section_id=${sectionId}` : 'all=1';

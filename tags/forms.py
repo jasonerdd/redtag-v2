@@ -1,6 +1,7 @@
 from django import forms
+from django.db.models import Q
 from .models import (
-    RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee
+    RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee, Dealer
 )
 
 
@@ -84,20 +85,26 @@ class RedTagForm(forms.ModelForm):
         else:
             self.fields['issue_type'].queryset = IssueType.objects.none()
 
-        # Sections from List sheet master table only
-        self.fields['section'].queryset = Section.objects.filter(show_in_form=True).order_by('code')
+        # Sections/stations from List sheet master table, plus whatever an
+        # imported record already uses so it can still be edited.
+        existing_section = self.instance.section_id if self.instance.pk else None
+        existing_station = self.instance.station_id if self.instance.pk else None
+        self.fields['section'].queryset = Section.objects.filter(
+            Q(show_in_form=True) | Q(pk=existing_section)
+        ).order_by('code')
 
+        visible_station = Q(show_in_form=True) | Q(pk=existing_station)
         if 'section' in self.data:
             try:
                 section_id = int(self.data.get('section'))
                 self.fields['station'].queryset = Station.objects.filter(
-                    section_id=section_id, show_in_form=True
+                    visible_station, section_id=section_id
                 )
             except (ValueError, TypeError):
                 self.fields['station'].queryset = Station.objects.none()
-        elif self.instance.pk and self.instance.section_id:
+        elif existing_section:
             self.fields['station'].queryset = Station.objects.filter(
-                section=self.instance.section, show_in_form=True
+                visible_station, section_id=existing_section
             )
         else:
             self.fields['station'].queryset = Station.objects.none()
@@ -105,10 +112,31 @@ class RedTagForm(forms.ModelForm):
         self.fields['category'].queryset = Category.objects.all()
         self.fields['model'].queryset = VehicleModel.objects.all()
 
+        # Excel-imported records often lack fields that new entries must have;
+        # don't block editing (e.g. closing) them over data that was never captured.
+        if self.instance.pk:
+            instance = self.instance
+            if instance.quantity is None:
+                self.fields['quantity'].required = False
+            if not instance.category_id:
+                self.fields['category'].required = False
+            if not instance.issue_type_id:
+                self.fields['issue_type'].required = False
+            if not instance.station_id:
+                self.fields['station'].required = False
+            if not instance.raised_by_id:
+                self.fields['raised_by_employee_no'].required = False
+            if instance.vehicle_id and not instance.vehicle.lot:
+                self.fields['lot'].required = False
+
     def _resolve_employee(self, employee_no, field_name):
         employee_no = (employee_no or '').strip()
         if not employee_no:
             return None
+        existing = [self.instance.raised_by, self.instance.verified_by] if self.instance.pk else []
+        for employee in existing:
+            if employee and employee.employee_no == employee_no:
+                return employee
         try:
             return Employee.objects.get(employee_no=employee_no, active=True)
         except Employee.DoesNotExist:
@@ -203,6 +231,12 @@ class RedTagFilterForm(forms.Form):
         queryset=VehicleModel.objects.all(),
         required=False,
         empty_label='Select an option',
+    )
+    customer = forms.ModelChoiceField(
+        queryset=Dealer.objects.all(),
+        required=False,
+        empty_label='Select an option',
+        label='Customer',
     )
     lot = forms.CharField(required=False, label='Lot')
     chassis = forms.CharField(required=False, label='Chassis No.')

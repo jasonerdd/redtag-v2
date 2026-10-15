@@ -1,7 +1,10 @@
+from django.conf import settings
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.db.models import Count, Max, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -51,6 +54,7 @@ class VehicleListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         tag_q = self._tag_filter()
+        customer = self.request.GET.get('customer')
         lot = self.request.GET.get('lot')
         chassis = self.request.GET.get('chassis')
         q = self.request.GET.get('q')
@@ -62,6 +66,8 @@ class VehicleListView(LoginRequiredMixin, ListView):
         else:
             qs = qs.filter(red_tags__isnull=False)
 
+        if customer:
+            qs = qs.filter(dealer_id=customer)
         if lot:
             qs = qs.filter(lot__icontains=lot)
         if chassis:
@@ -194,6 +200,7 @@ def export_redtags(request):
     section = request.GET.get('section')
     station = request.GET.get('station')
     model = request.GET.get('model')
+    customer = request.GET.get('customer')
     lot = request.GET.get('lot')
     chassis = request.GET.get('chassis')
     date_from = request.GET.get('date_from')
@@ -207,6 +214,8 @@ def export_redtags(request):
         qs = qs.filter(station_id=station)
     if model:
         qs = qs.filter(vehicle__model_id=model)
+    if customer:
+        qs = qs.filter(vehicle__dealer_id=customer)
     if lot:
         qs = qs.filter(vehicle__lot__icontains=lot)
     if chassis:
@@ -268,9 +277,11 @@ def load_stations(request):
         stations = Station.objects.filter(show_in_form=True).select_related('section')
         data = [{'id': s.id, 'name': str(s)} for s in stations]
         return JsonResponse(data, safe=False)
-    stations = Station.objects.filter(
-        section_id=section_id, show_in_form=True
-    ).order_by('name')
+    include = request.GET.get('include')
+    visible = Q(show_in_form=True)
+    if include and include.isdigit():
+        visible |= Q(pk=include)
+    stations = Station.objects.filter(visible, section_id=section_id).order_by('name')
     data = [{'id': s.id, 'name': s.name} for s in stations]
     return JsonResponse(data, safe=False)
 
@@ -318,6 +329,24 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
     model = AuditLog
     template_name = 'tags/audit_detail.html'
     context_object_name = 'log'
+
+
+def csrf_failure(request, reason=''):
+    """Recover from stale CSRF tokens (e.g. tabs opened before a login/logout elsewhere)."""
+    if request.path == reverse('logout'):
+        logout(request)
+        return redirect(settings.LOGOUT_REDIRECT_URL)
+
+    messages.warning(
+        request,
+        'Your session changed (possibly in another tab). Please try again.',
+    )
+    referer = request.META.get('HTTP_REFERER')
+    if referer and url_has_allowed_host_and_scheme(
+        referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return redirect(referer)
+    return redirect(settings.LOGIN_REDIRECT_URL)
 
 
 def bootstrap(request):
