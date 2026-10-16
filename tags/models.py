@@ -113,12 +113,26 @@ class Vehicle(models.Model):
     )
     lot = models.CharField(max_length=50, blank=True)
     vi_size = models.CharField(max_length=10, blank=True)
+    vehicle_type = models.CharField(max_length=100, blank=True)
+    engine_no = models.CharField(max_length=50, blank=True)
+    colour = models.CharField(max_length=50, blank=True)
+    bond_entry = models.CharField(max_length=100, blank=True)
+    arrival_date = models.DateField(null=True, blank=True)
+    receiving_status = models.CharField(max_length=50, blank=True)
+    received_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='units_received',
+    )
+    received_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-id']
 
     def __str__(self):
         return f"{self.chassis_no} ({self.model.name})"
+
+    def get_absolute_url(self):
+        return reverse('vehicle-detail', kwargs={'pk': self.pk})
 
 
 class RedTag(TimeStampedModel):

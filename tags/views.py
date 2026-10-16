@@ -2,24 +2,37 @@ from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import ListView, DetailView, CreateView, UpdateView
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 from django.urls import reverse, reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.db.models import Count, Max, Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.utils import timezone
 from openpyxl import Workbook
 
 from .models import RedTag, Station, IssueType, Employee, Vehicle, AuditLog
-from .forms import RedTagForm, RedTagFilterForm
+from .forms import RedTagForm, RedTagFilterForm, UnitForm, UnitFilterForm
 from .audit import log_red_tag_action
+from .receiving import (
+    ParsedRow,
+    apply_receiving_rows,
+    build_template_workbook,
+    find_vehicle_by_chassis,
+    normalize_chassis,
+    parse_receiving_workbook,
+)
 
 import io
 import os
 from django.http import HttpResponse
 from django.core.management import call_command
+from django.views.decorators.http import require_GET
+
+
+class DepartmentLandingView(LoginRequiredMixin, TemplateView):
+    template_name = 'tags/landing.html'
 
 
 class VehicleListView(LoginRequiredMixin, ListView):
@@ -291,6 +304,183 @@ def load_issue_types(request):
     issue_types = IssueType.objects.filter(category_id=category_id).order_by('name')
     data = [{'id': i.id, 'name': i.name} for i in issue_types]
     return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_GET
+def unit_lookup(request):
+    chassis = request.GET.get('chassis', '')
+    vehicle = find_vehicle_by_chassis(chassis)
+    if not vehicle:
+        return JsonResponse({'found': False, 'chassis': normalize_chassis(chassis)})
+    return JsonResponse({
+        'found': True,
+        'id': vehicle.id,
+        'chassis_no': vehicle.chassis_no,
+        'model': vehicle.model.name,
+        'model_id': vehicle.model_id,
+        'lot': vehicle.lot or '',
+        'customer': vehicle.dealer.name if vehicle.dealer_id else '',
+        'customer_id': vehicle.dealer_id,
+        'vehicle_type': vehicle.vehicle_type or '',
+        'engine_no': vehicle.engine_no or '',
+    })
+
+
+@login_required
+@require_GET
+def chassis_suggest(request):
+    q = (request.GET.get('q') or '').strip()
+    if len(q) < 3:
+        return JsonResponse({'results': []})
+    qs = (
+        Vehicle.objects.filter(chassis_no__icontains=q)
+        .select_related('model', 'dealer')
+        .order_by('chassis_no')[:20]
+    )
+    results = [{
+        'chassis_no': v.chassis_no,
+        'model': v.model.name,
+        'lot': v.lot or '',
+        'customer': v.dealer.name if v.dealer_id else '',
+    } for v in qs]
+    return JsonResponse({'results': results})
+
+
+class ReceivedUnitListView(LoginRequiredMixin, ListView):
+    model = Vehicle
+    template_name = 'tags/unit_list.html'
+    context_object_name = 'units'
+    paginate_by = 25
+
+    def get_queryset(self):
+        qs = Vehicle.objects.select_related('model', 'dealer').all()
+        customer = self.request.GET.get('customer')
+        model = self.request.GET.get('model')
+        lot = self.request.GET.get('lot')
+        chassis = self.request.GET.get('chassis')
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+
+        if customer:
+            qs = qs.filter(dealer_id=customer)
+        if model:
+            qs = qs.filter(model_id=model)
+        if lot:
+            qs = qs.filter(lot__icontains=lot)
+        if chassis:
+            qs = qs.filter(chassis_no__icontains=chassis)
+        if date_from:
+            qs = qs.filter(arrival_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(arrival_date__lte=date_to)
+
+        # Prefer units that have been through receiving (have arrival_date or received_at)
+        return qs.order_by('-arrival_date', '-received_at', '-id')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['filter_form'] = UnitFilterForm(self.request.GET or None)
+        return context
+
+
+class UnitCreateView(LoginRequiredMixin, CreateView):
+    model = Vehicle
+    form_class = UnitForm
+    template_name = 'tags/unit_form.html'
+    success_url = reverse_lazy('unit-list')
+
+    def form_valid(self, form):
+        self.object = form.save(user=self.request.user)
+        messages.success(
+            self.request,
+            f'Unit {self.object.chassis_no} received successfully.',
+        )
+        return redirect(self.get_success_url())
+
+
+class UnitUpdateView(LoginRequiredMixin, UpdateView):
+    model = Vehicle
+    form_class = UnitForm
+    template_name = 'tags/unit_form.html'
+
+    def get_success_url(self):
+        return reverse('vehicle-detail', kwargs={'pk': self.object.pk})
+
+    def form_valid(self, form):
+        self.object = form.save(user=self.request.user)
+        messages.success(self.request, f'Unit {self.object.chassis_no} updated.')
+        return redirect(self.get_success_url())
+
+
+@login_required
+def receiving_upload(request):
+    if request.method == 'POST':
+        upload = request.FILES.get('file')
+        if not upload:
+            messages.error(request, 'Choose an Excel file to upload.')
+            return redirect('receiving-upload')
+        if not upload.name.lower().endswith(('.xlsx', '.xlsm')):
+            messages.error(request, 'Upload an .xlsx Excel file.')
+            return redirect('receiving-upload')
+        try:
+            rows = parse_receiving_workbook(upload)
+        except Exception as exc:
+            messages.error(request, f'Could not read the file: {exc}')
+            return redirect('receiving-upload')
+
+        request.session['receiving_preview'] = [row.to_dict() for row in rows]
+        return redirect('receiving-preview')
+
+    return render(request, 'tags/receiving_upload.html')
+
+
+@login_required
+def receiving_preview(request):
+    raw_rows = request.session.get('receiving_preview')
+    if not raw_rows:
+        messages.warning(request, 'Upload a receiving sheet first.')
+        return redirect('receiving-upload')
+
+    rows = [ParsedRow.from_dict(r) for r in raw_rows]
+    counts = {
+        'new': sum(1 for r in rows if r.status == 'new'),
+        'update': sum(1 for r in rows if r.status == 'update'),
+        'error': sum(1 for r in rows if r.status == 'error'),
+        'new_customers': sum(1 for r in rows if r.new_customer and r.status != 'error'),
+    }
+
+    if request.method == 'POST':
+        if 'cancel' in request.POST:
+            request.session.pop('receiving_preview', None)
+            messages.info(request, 'Upload cancelled.')
+            return redirect('receiving-upload')
+
+        result = apply_receiving_rows(rows, user=request.user)
+        request.session.pop('receiving_preview', None)
+        messages.success(
+            request,
+            f"Receiving import complete: {result['created']} created, "
+            f"{result['updated']} updated, {result['skipped']} skipped.",
+        )
+        return redirect('unit-list')
+
+    return render(request, 'tags/receiving_preview.html', {
+        'rows': rows,
+        'counts': counts,
+    })
+
+
+@login_required
+@require_GET
+def receiving_template(request):
+    wb = build_template_workbook()
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="receiving_template.xlsx"'
+    wb.save(response)
+    return response
 
 
 class AuditLogListView(LoginRequiredMixin, ListView):

@@ -1,0 +1,132 @@
+{% extends 'tags/receiving_base.html' %}
+{% block title %}Received Units · Receiving{% endblock %}
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<style>
+  .ts-wrapper.form-select .ts-control {
+    padding: 0.375rem 0.75rem;
+    min-height: calc(1.5em + 0.75rem + 2px);
+  }
+  .ts-dropdown .option[data-value=""] { display: none; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="page-title">Received Units</h1>
+    <p class="page-sub mb-0">Units that have entered the plant through Receiving</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'receiving-upload' %}">Upload sheet</a>
+    <a class="btn btn-danger" href="{% url 'unit-create' %}">Add unit</a>
+  </div>
+</div>
+
+<div class="panel mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.customer.id_for_label }}">Customer</label>
+      {{ filter_form.customer }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.model.id_for_label }}">Model</label>
+      {{ filter_form.model }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.lot.id_for_label }}">Lot</label>
+      {{ filter_form.lot }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.chassis.id_for_label }}">Chassis</label>
+      {{ filter_form.chassis }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.date_from.id_for_label }}">From</label>
+      {{ filter_form.date_from }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="{{ filter_form.date_to.id_for_label }}">To</label>
+      {{ filter_form.date_to }}
+    </div>
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-dark" type="submit">Apply filters</button>
+      <a class="btn btn-outline-secondary" href="{% url 'unit-list' %}">Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Chassis</th>
+          <th>Customer</th>
+          <th>Model</th>
+          <th>Type</th>
+          <th>Lot</th>
+          <th>Engine</th>
+          <th>Arrival</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for unit in units %}
+        <tr>
+          <td>
+            <a href="{% url 'vehicle-detail' unit.pk %}" class="fw-semibold text-decoration-none">
+              {{ unit.chassis_no }}
+            </a>
+          </td>
+          <td>{{ unit.dealer.name|default:'—' }}</td>
+          <td>{{ unit.model.name }}</td>
+          <td>{{ unit.vehicle_type|default:'—' }}</td>
+          <td>{{ unit.lot|default:'—' }}</td>
+          <td>{{ unit.engine_no|default:'—' }}</td>
+          <td>{{ unit.arrival_date|default:'—' }}</td>
+          <td class="text-nowrap">
+            <a href="{% url 'vehicle-detail' unit.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
+            <a href="{% url 'unit-edit' unit.pk %}" class="btn btn-sm btn-outline-dark">Edit</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">No units match these filters. Upload a sheet or add a unit.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+  <nav class="mt-3">
+    <ul class="pagination mb-0">
+      {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a></li>
+      {% endif %}
+      <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+      {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+<script>
+  const PLACEHOLDER = 'Select an option';
+  function enhanceSelect(selectEl) {
+    if (!selectEl || selectEl.tomselect) return;
+    if (![...selectEl.options].some(opt => opt.value === '')) {
+      selectEl.insertBefore(new Option(PLACEHOLDER, '', false, false), selectEl.firstChild);
+    }
+    new TomSelect(selectEl, {
+      create: false, maxOptions: null, allowEmptyOption: true,
+      placeholder: PLACEHOLDER, sortField: { field: 'text', direction: 'asc' },
+    });
+  }
+  enhanceSelect(document.getElementById('id_customer'));
+  enhanceSelect(document.getElementById('id_model'));
+</script>
+{% endblock %}

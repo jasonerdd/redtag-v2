@@ -1,0 +1,8 @@
+{% extends 'tags/base.html' %}
+{% block brand_name %}Receiving{% endblock %}
+{% block brand_href %}{% url 'unit-create' %}{% endblock %}
+{% block nav_links %}
+  <li class="nav-item"><a class="nav-link" href="{% url 'unit-create' %}">Add unit</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'receiving-upload' %}">Upload sheet</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'unit-list' %}">Received Units</a></li>
+{% endblock %}

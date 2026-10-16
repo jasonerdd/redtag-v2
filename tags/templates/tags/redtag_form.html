@@ -23,12 +23,15 @@
   .ts-dropdown .option[data-value=""] {
     display: none;
   }
+  .unit-lookup-msg { font-size: 0.875rem; margin-top: 0.25rem; }
+  .unit-lookup-msg.error { color: #b42318; }
+  .unit-lookup-msg.ok { color: #047857; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="mb-3">
   <h1 class="page-title">{% if object %}Edit red tag #{{ object.pk }}{% else %}New red tag{% endif %}</h1>
-  <p class="page-sub">Enter red tag data. Fill all the fields and click the save button to save the form.</p>
+  <p class="page-sub">Enter the chassis number first — model, lot, and customer fill in from receiving.</p>
 </div>
 
 <div class="panel">
@@ -54,20 +57,27 @@
         {{ form.station }}
         {{ form.station.errors }}
       </div>
-      <div class="col-md-4">
-        <label class="form-label" for="{{ form.model.id_for_label }}">Model <span class="text-danger">*</span></label>
-        {{ form.model }}
-        {{ form.model.errors }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="{{ form.lot.id_for_label }}">Lot Number <span class="text-danger">*</span></label>
-        {{ form.lot }}
-        {{ form.lot.errors }}
-      </div>
-      <div class="col-md-4">
+      <div class="col-md-4 position-relative">
         <label class="form-label" for="{{ form.chassis_no.id_for_label }}">Chassis No. <span class="text-danger">*</span></label>
         {{ form.chassis_no }}
+        <div id="chassis-suggest" class="chassis-suggest" hidden></div>
+        <div id="chassis-lookup-msg" class="unit-lookup-msg"></div>
         {{ form.chassis_no.errors }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.model_display.id_for_label }}">Model</label>
+        {{ form.model_display }}
+        {{ form.model_display.errors }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.lot_display.id_for_label }}">Lot Number</label>
+        {{ form.lot_display }}
+        {{ form.lot_display.errors }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.customer_display.id_for_label }}">Customer</label>
+        {{ form.customer_display }}
+        {{ form.customer_display.errors }}
       </div>
       <div class="col-md-4">
         <label class="form-label" for="{{ form.quantity.id_for_label }}">Quantity <span class="text-danger">*</span></label>
@@ -138,17 +148,25 @@
   const sectionSelect = document.getElementById('id_section');
   const stationSelect = document.getElementById('id_station');
   const statusSelect = document.getElementById('id_status');
-  const modelSelect = document.getElementById('id_model');
+  const chassisInput = document.getElementById('id_chassis_no');
+  const modelDisplay = document.getElementById('id_model_display');
+  const lotDisplay = document.getElementById('id_lot_display');
+  const customerDisplay = document.getElementById('id_customer_display');
+  const lookupMsg = document.getElementById('chassis-lookup-msg');
+  const suggestBox = document.getElementById('chassis-suggest');
   const closedFields = document.getElementById('closed-fields');
   const initialIssueTypeId = {% if form.issue_type.value %}"{{ form.issue_type.value }}"{% else %}null{% endif %};
   const initialStationId = {% if form.station.value %}"{{ form.station.value }}"{% else %}null{% endif %};
+  const isEdit = {% if object %}true{% else %}false{% endif %};
   const PLACEHOLDER = 'Select an option';
+  let lookupTimer = null;
+  let suggestTimer = null;
+  let activeSuggest = -1;
 
   function enhanceSelect(selectEl) {
     if (!selectEl) return null;
     if (selectEl.tomselect) return selectEl.tomselect;
 
-    // Ensure blank option exists so the field can start unselected
     if (![...selectEl.options].some(opt => opt.value === '')) {
       selectEl.insertBefore(new Option(PLACEHOLDER, '', true, true), selectEl.firstChild);
     } else {
@@ -156,7 +174,6 @@
       if (blank) blank.textContent = PLACEHOLDER;
     }
 
-    // Keep blank selected unless a real value was chosen (edit / validation redisplay)
     const selectedReal = [...selectEl.options].find(opt => opt.selected && opt.value !== '');
     if (!selectedReal) {
       selectEl.value = '';
@@ -206,8 +223,92 @@
     }
   }
 
+  function clearUnitFields() {
+    if (modelDisplay) modelDisplay.value = '';
+    if (lotDisplay) lotDisplay.value = '';
+    if (customerDisplay) customerDisplay.value = '';
+  }
+
+  function hideSuggest() {
+    if (!suggestBox) return;
+    suggestBox.hidden = true;
+    suggestBox.innerHTML = '';
+    activeSuggest = -1;
+  }
+
+  function applyUnit(data) {
+    chassisInput.value = data.chassis_no || '';
+    modelDisplay.value = data.model || '';
+    lotDisplay.value = data.lot || '';
+    customerDisplay.value = data.customer || '';
+    lookupMsg.textContent = '';
+    lookupMsg.className = 'unit-lookup-msg ok';
+    hideSuggest();
+  }
+
+  function showSuggest(results) {
+    if (!suggestBox) return;
+    if (!results.length) {
+      hideSuggest();
+      return;
+    }
+    suggestBox.innerHTML = results.map((item, idx) => {
+      const label = item.chassis_no + (item.model ? ' · ' + item.model : '');
+      return '<button type="button" data-idx="' + idx + '">' + label + '</button>';
+    }).join('');
+    suggestBox.hidden = false;
+    activeSuggest = -1;
+    [...suggestBox.querySelectorAll('button')].forEach((btn, idx) => {
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        applyUnit(results[idx]);
+      });
+    });
+  }
+
+  async function fetchSuggestions() {
+    if (!chassisInput || isEdit) return;
+    const value = chassisInput.value.trim();
+    if (value.length < 3) {
+      hideSuggest();
+      return;
+    }
+    try {
+      const response = await fetch(`/ajax/chassis-suggest/?q=${encodeURIComponent(value)}`);
+      const data = await response.json();
+      showSuggest(data.results || []);
+    } catch (err) {
+      hideSuggest();
+    }
+  }
+
+  async function lookupChassis() {
+    if (!chassisInput || isEdit) return;
+    const value = chassisInput.value.trim();
+    hideSuggest();
+    if (!value) {
+      clearUnitFields();
+      lookupMsg.textContent = '';
+      lookupMsg.className = 'unit-lookup-msg';
+      return;
+    }
+    try {
+      const response = await fetch(`/ajax/unit-lookup/?chassis=${encodeURIComponent(value)}`);
+      const data = await response.json();
+      if (data.found) {
+        applyUnit(data);
+      } else {
+        clearUnitFields();
+        lookupMsg.textContent = 'unit does not exist';
+        lookupMsg.className = 'unit-lookup-msg error';
+      }
+    } catch (err) {
+      lookupMsg.textContent = 'unit does not exist';
+      lookupMsg.className = 'unit-lookup-msg error';
+    }
+  }
+
   const sectionTs = enhanceSelect(sectionSelect);
-  const modelTs = enhanceSelect(modelSelect);
   const categoryTs = enhanceSelect(categorySelect);
   const issueTypeTs = enhanceSelect(issueTypeSelect);
   const stationTs = enhanceSelect(stationSelect);
@@ -259,6 +360,45 @@
   if (statusTs) {
     statusTs.on('change', toggleClosedFields);
     toggleClosedFields();
+  }
+
+  if (chassisInput && !isEdit) {
+    chassisInput.setAttribute('autocomplete', 'off');
+    chassisInput.addEventListener('input', () => {
+      clearUnitFields();
+      lookupMsg.textContent = '';
+      lookupMsg.className = 'unit-lookup-msg';
+      clearTimeout(suggestTimer);
+      suggestTimer = setTimeout(fetchSuggestions, 200);
+    });
+    chassisInput.addEventListener('blur', () => {
+      setTimeout(lookupChassis, 150);
+    });
+    chassisInput.addEventListener('keydown', (e) => {
+      if (!suggestBox || suggestBox.hidden) return;
+      const buttons = [...suggestBox.querySelectorAll('button')];
+      if (!buttons.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSuggest = Math.min(activeSuggest + 1, buttons.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSuggest = Math.max(activeSuggest - 1, 0);
+      } else if (e.key === 'Enter' && activeSuggest >= 0) {
+        e.preventDefault();
+        buttons[activeSuggest].dispatchEvent(new Event('mousedown'));
+        return;
+      } else if (e.key === 'Escape') {
+        hideSuggest();
+        return;
+      } else {
+        return;
+      }
+      buttons.forEach((b, i) => b.classList.toggle('active', i === activeSuggest));
+    });
+    if (chassisInput.value.trim()) {
+      lookupChassis();
+    }
   }
 </script>
 {% endblock %}

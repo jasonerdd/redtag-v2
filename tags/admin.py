@@ -56,9 +56,14 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
-    list_display = ['chassis_no', 'model', 'dealer', 'lot', 'vi_size']
-    search_fields = ['chassis_no']
-    list_filter = ['model', 'dealer']
+    list_display = [
+        'chassis_no', 'model', 'dealer', 'lot', 'vehicle_type',
+        'engine_no', 'arrival_date', 'receiving_status',
+    ]
+    search_fields = ['chassis_no', 'engine_no', 'lot']
+    list_filter = ['model', 'dealer', 'arrival_date']
+    readonly_fields = ['received_at']
+    autocomplete_fields = ['model', 'dealer', 'received_by']
 
 
 class RedTagResource(resources.ModelResource):

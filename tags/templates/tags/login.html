@@ -1,27 +1,27 @@
 {% extends 'tags/base.html' %}
-{% block title %}Login · Red Tag System{% endblock %}
+{% block title %}Sign in · AVA Systems{% endblock %}
+{% block brand_href %}{% url 'login' %}{% endblock %}
+{% block brand_name %}AVA Systems{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-5 col-lg-4">
-    <div class="panel mt-5">
-      <h1 class="page-title">Sign in</h1>
-      <p class="page-sub">Assembly Red Tag Report system</p>
-      <form method="post">
-        {% csrf_token %}
-        {% if form.errors %}
-          <div class="alert alert-danger">Invalid username or password.</div>
-        {% endif %}
-        <div class="mb-3">
-          <label class="form-label" for="id_username">Username</label>
-          <input type="text" name="username" autofocus class="form-control" id="id_username" required>
-        </div>
-        <div class="mb-3">
-          <label class="form-label" for="id_password">Password</label>
-          <input type="password" name="password" class="form-control" id="id_password" required>
-        </div>
-        <button class="btn btn-danger w-100" type="submit">Login</button>
-      </form>
-    </div>
+<div class="login-wrap">
+  <div class="panel">
+    <h1 class="page-title">Sign in</h1>
+    <p class="page-sub">Receiving and Red Tag </p>
+    <form method="post">
+      {% csrf_token %}
+      {% if form.errors %}
+        <div class="alert alert-danger">Invalid username or password.</div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="id_username">Username</label>
+        <input type="text" name="username" autofocus class="form-control" id="id_username" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_password">Password</label>
+        <input type="password" name="password" class="form-control" id="id_password" required>
+      </div>
+      <button class="btn btn-danger w-100" type="submit">Sign in</button>
+    </form>
   </div>
 </div>
 {% endblock %}

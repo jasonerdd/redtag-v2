@@ -1,18 +1,24 @@
 from django import forms
 from django.db.models import Q
+from django.utils import timezone
+
 from .models import (
     RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee, Dealer
 )
+from .receiving import find_vehicle_by_chassis, normalize_chassis
 
 
 class RedTagForm(forms.ModelForm):
     chassis_no = forms.CharField(max_length=50, label='Chassis No.')
-    model = forms.ModelChoiceField(
-        queryset=VehicleModel.objects.all(),
-        label='Model',
-        empty_label='Select an option',
+    model_display = forms.CharField(
+        required=False, label='Model', disabled=True,
     )
-    lot = forms.CharField(max_length=50, label='Lot Number')
+    lot_display = forms.CharField(
+        required=False, label='Lot Number', disabled=True,
+    )
+    customer_display = forms.CharField(
+        required=False, label='Customer', disabled=True,
+    )
     raised_by_employee_no = forms.CharField(max_length=20, label='Raised By Staff ID')
     verified_by_employee_no = forms.CharField(
         max_length=20, required=False, label='Closed By Staff ID'
@@ -21,7 +27,8 @@ class RedTagForm(forms.ModelForm):
     class Meta:
         model = RedTag
         fields = [
-            'date_raised', 'section', 'model', 'lot', 'chassis_no',
+            'date_raised', 'section', 'chassis_no',
+            'model_display', 'lot_display', 'customer_display',
             'issue_description', 'quantity',
             'category', 'issue_type',
             'raised_by_employee_no', 'station', 'status',
@@ -67,12 +74,23 @@ class RedTagForm(forms.ModelForm):
         if self.instance.pk and self.instance.vehicle_id:
             vehicle = self.instance.vehicle
             self.fields['chassis_no'].initial = vehicle.chassis_no
-            self.fields['model'].initial = vehicle.model_id
-            self.fields['lot'].initial = vehicle.lot
+            self.fields['model_display'].initial = vehicle.model.name
+            self.fields['lot_display'].initial = vehicle.lot
+            self.fields['customer_display'].initial = (
+                vehicle.dealer.name if vehicle.dealer_id else ''
+            )
             if self.instance.raised_by_id:
                 self.fields['raised_by_employee_no'].initial = self.instance.raised_by.employee_no
             if self.instance.verified_by_id:
                 self.fields['verified_by_employee_no'].initial = self.instance.verified_by.employee_no
+        elif self.data.get('chassis_no'):
+            vehicle = find_vehicle_by_chassis(self.data.get('chassis_no'))
+            if vehicle:
+                self.fields['model_display'].initial = vehicle.model.name
+                self.fields['lot_display'].initial = vehicle.lot
+                self.fields['customer_display'].initial = (
+                    vehicle.dealer.name if vehicle.dealer_id else ''
+                )
 
         if 'category' in self.data:
             try:
@@ -110,7 +128,6 @@ class RedTagForm(forms.ModelForm):
             self.fields['station'].queryset = Station.objects.none()
 
         self.fields['category'].queryset = Category.objects.all()
-        self.fields['model'].queryset = VehicleModel.objects.all()
 
         # Excel-imported records often lack fields that new entries must have;
         # don't block editing (e.g. closing) them over data that was never captured.
@@ -126,8 +143,6 @@ class RedTagForm(forms.ModelForm):
                 self.fields['station'].required = False
             if not instance.raised_by_id:
                 self.fields['raised_by_employee_no'].required = False
-            if instance.vehicle_id and not instance.vehicle.lot:
-                self.fields['lot'].required = False
 
     def _resolve_employee(self, employee_no, field_name):
         employee_no = (employee_no or '').strip()
@@ -142,6 +157,15 @@ class RedTagForm(forms.ModelForm):
         except Employee.DoesNotExist:
             self.add_error(field_name, f'No active staff member found with ID "{employee_no}".')
             return None
+
+    def clean_chassis_no(self):
+        raw = (self.cleaned_data.get('chassis_no') or '').strip()
+        if not raw:
+            raise forms.ValidationError('This field is required.')
+        # Keep full value for edit of old imported units; normalize only for new tags
+        if self.instance.pk and self.instance.vehicle_id:
+            return raw
+        return normalize_chassis(raw)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -192,24 +216,147 @@ class RedTagForm(forms.ModelForm):
         if section and station and station.section_id and station.section_id != section.id:
             self.add_error('station', 'Selected station does not belong to the selected section.')
 
+        chassis_no = cleaned_data.get('chassis_no')
+        vehicle = None
+        if chassis_no:
+            if self.instance.pk and self.instance.vehicle_id:
+                # Editing: keep the existing vehicle unless chassis changed
+                if chassis_no == self.instance.vehicle.chassis_no or (
+                    normalize_chassis(chassis_no) == normalize_chassis(self.instance.vehicle.chassis_no)
+                ):
+                    vehicle = self.instance.vehicle
+                else:
+                    vehicle = find_vehicle_by_chassis(chassis_no)
+            else:
+                vehicle = find_vehicle_by_chassis(chassis_no)
+
+            if not vehicle:
+                self.add_error('chassis_no', 'unit does not exist')
+            else:
+                cleaned_data['vehicle'] = vehicle
+                cleaned_data['model_display'] = vehicle.model.name
+                cleaned_data['lot_display'] = vehicle.lot
+                cleaned_data['customer_display'] = (
+                    vehicle.dealer.name if vehicle.dealer_id else ''
+                )
+
         return cleaned_data
 
     def save(self, commit=True):
-        chassis_no = self.cleaned_data['chassis_no'].strip()
-        model = self.cleaned_data['model']
-        lot = self.cleaned_data.get('lot') or ''
-
-        vehicle, _ = Vehicle.objects.update_or_create(
-            chassis_no=chassis_no,
-            defaults={
-                'model': model,
-                'lot': lot,
-            },
-        )
+        vehicle = self.cleaned_data.get('vehicle')
+        if not vehicle:
+            raise forms.ValidationError('Vehicle profile is required.')
         self.instance.vehicle = vehicle
         self.instance.raised_by = self.cleaned_data.get('raised_by')
         self.instance.verified_by = self.cleaned_data.get('verified_by')
         return super().save(commit=commit)
+
+
+class UnitForm(forms.ModelForm):
+    """Single-unit receiving form — fields match the receiving sheet columns."""
+
+    class Meta:
+        model = Vehicle
+        fields = [
+            'model', 'vehicle_type', 'lot',
+            'chassis_no', 'engine_no', 'arrival_date',
+        ]
+        labels = {
+            'lot': 'Lot No.',
+            'chassis_no': 'Chassis No.',
+            'engine_no': 'Engine No.',
+            'vehicle_type': 'Vehicle Type',
+            'arrival_date': 'CKD Arrival Date',
+        }
+        widgets = {
+            'arrival_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'vehicle_type': forms.TextInput(attrs={'class': 'form-control'}),
+            'lot': forms.TextInput(attrs={'class': 'form-control'}),
+            'chassis_no': forms.TextInput(attrs={'class': 'form-control'}),
+            'engine_no': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        placeholder = 'Select an option'
+        self.fields['model'].empty_label = placeholder
+        self.fields['model'].queryset = VehicleModel.objects.select_related('dealer').all()
+        self.fields['lot'].required = True
+        self.fields['arrival_date'].required = True
+
+        for name, field in self.fields.items():
+            if name in self.Meta.widgets:
+                continue
+            if isinstance(field.widget, (forms.Select, forms.SelectMultiple)):
+                field.widget.attrs.setdefault('class', 'form-select')
+            else:
+                field.widget.attrs.setdefault('class', 'form-control')
+
+    def clean_chassis_no(self):
+        raw = (self.cleaned_data.get('chassis_no') or '').strip()
+        if not raw:
+            raise forms.ValidationError('This field is required.')
+        chassis = normalize_chassis(raw)
+        qs = Vehicle.objects.filter(chassis_no=chassis)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f'Chassis "{chassis}" is already received.')
+        # Also block if an older full-VIN unit ends with this short form
+        if not self.instance.pk:
+            existing = find_vehicle_by_chassis(chassis)
+            if existing and existing.chassis_no != chassis:
+                raise forms.ValidationError(
+                    f'A unit ending in "{chassis}" already exists ({existing.chassis_no}).'
+                )
+        return chassis
+
+    def clean(self):
+        cleaned = super().clean()
+        model = cleaned.get('model')
+        if model and not model.dealer_id:
+            self.add_error(
+                'model',
+                'This model has no customer linked. Set the customer on the model in Admin first.',
+            )
+        return cleaned
+
+    def save(self, commit=True, user=None):
+        instance = super().save(commit=False)
+        model = self.cleaned_data.get('model') or instance.model
+        if model is not None:
+            instance.dealer = model.dealer
+        if user is not None and getattr(user, 'is_authenticated', False):
+            instance.received_by = user
+        if not instance.received_at:
+            instance.received_at = timezone.now()
+        if commit:
+            instance.save()
+        return instance
+
+
+class UnitFilterForm(forms.Form):
+    customer = forms.ModelChoiceField(
+        queryset=Dealer.objects.all(),
+        required=False,
+        empty_label='Select an option',
+        label='Customer',
+    )
+    model = forms.ModelChoiceField(
+        queryset=VehicleModel.objects.all(),
+        required=False,
+        empty_label='Select an option',
+    )
+    lot = forms.CharField(required=False, label='Lot')
+    chassis = forms.CharField(required=False, label='Chassis No.')
+    date_from = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    date_to = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
+            field.widget.attrs.setdefault('class', css)
 
 
 class RedTagFilterForm(forms.Form):

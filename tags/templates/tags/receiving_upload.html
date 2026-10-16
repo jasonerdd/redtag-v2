@@ -1,0 +1,31 @@
+{% extends 'tags/receiving_base.html' %}
+{% block title %}Upload receiving sheet · Receiving{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="page-title">Upload receiving sheet</h1>
+  <p class="page-sub">Import a day's units from Excel. Review the rows before they are saved.</p>
+</div>
+
+<div class="panel mb-3">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="id_file">Excel file (.xlsx)</label>
+      <input type="file" name="file" id="id_file" class="form-control" accept=".xlsx,.xlsm" required>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-danger">Upload and preview</button>
+      <a href="{% url 'receiving-template' %}" class="btn btn-outline-secondary">Download blank template</a>
+      <a href="{% url 'unit-create' %}" class="btn btn-outline-secondary">Add one unit instead</a>
+      <a href="{% url 'unit-list' %}" class="btn btn-outline-secondary">Back to units</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  <h2 class="h6 text-uppercase text-muted mb-2">Expected columns</h2>
+  <p class="mb-0 small text-muted">
+    CUSTOMER, MODEL, VEHICLE TYPE, LOT NO., CHASSIS NO (last 7 preferred), ENGINE NO, CKD ARRIVAL DATE
+  </p>
+</div>
+{% endblock %}

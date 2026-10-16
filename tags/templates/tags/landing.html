@@ -1,0 +1,27 @@
+{% extends 'tags/base.html' %}
+{% block title %}Choose department · AVA Systems{% endblock %}
+{% block brand_href %}{% url 'home' %}{% endblock %}
+{% block brand_name %}AVA Systems{% endblock %}
+{% block nav_links %}{% endblock %}
+{% block nav_switch %}{% endblock %}
+{% block content %}
+<div class="landing-wrap">
+  <p class="landing-brand">AVA <span class="accent">Systems</span></p>
+  <p class="landing-lead">Choose a department to continue. Receiving records units into the plant; Red Tag tracks issues on those units.</p>
+
+  <div class="dept-grid">
+    <a href="{% url 'unit-create' %}" class="dept-card dept-receiving">
+      <span class="dept-kicker">Department</span>
+      <h2>Receiving</h2>
+      <p>Record units as they enter the plant. Add one unit or upload a receiving sheet.</p>
+      <span class="dept-go">Open Receiving →</span>
+    </a>
+    <a href="{% url 'redtag-create' %}" class="dept-card dept-redtag">
+      <span class="dept-kicker">Department</span>
+      <h2>Red Tag</h2>
+      <p>Log new issues or close pending issues.</p>
+      <span class="dept-go">Open Red Tag →</span>
+    </a>
+  </div>
+</div>
+{% endblock %}

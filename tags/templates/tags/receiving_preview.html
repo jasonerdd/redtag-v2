@@ -1,0 +1,64 @@
+{% extends 'tags/receiving_base.html' %}
+{% block title %}Preview receiving import · Receiving{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="page-title">Preview receiving import</h1>
+  <p class="page-sub mb-0">
+    {{ counts.new }} new · {{ counts.update }} update · {{ counts.error }} error
+    {% if counts.new_customers %} · {{ counts.new_customers }} new customer(s){% endif %}
+  </p>
+</div>
+
+<div class="panel mb-3">
+  <form method="post" class="d-flex flex-wrap gap-2">
+    {% csrf_token %}
+    <button type="submit" name="confirm" class="btn btn-danger"
+      {% if counts.new == 0 and counts.update == 0 %}disabled{% endif %}>
+      Confirm import
+    </button>
+    <button type="submit" name="cancel" class="btn btn-outline-secondary">Cancel</button>
+    <a href="{% url 'receiving-upload' %}" class="btn btn-outline-secondary">Upload a different file</a>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Row</th>
+          <th>Status</th>
+          <th>Chassis</th>
+          <th>Customer</th>
+          <th>Model</th>
+          <th>Lot</th>
+          <th>Arrival</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if row.status == 'error' %}table-danger{% elif row.status == 'update' %}table-warning{% endif %}">
+          <td>{{ row.row_number }}</td>
+          <td class="text-uppercase small">{{ row.status }}</td>
+          <td>{{ row.chassis_no|default:'—' }}</td>
+          <td>
+            {{ row.customer|default:'—' }}
+            {% if row.new_customer %}<span class="badge text-bg-info">new</span>{% endif %}
+          </td>
+          <td>{{ row.model_name|default:'—' }}</td>
+          <td>{{ row.lot|default:'—' }}</td>
+          <td>{{ row.arrival_date|default:'—' }}</td>
+          <td class="small">
+            {% for err in row.errors %}<div class="text-danger">{{ err }}</div>{% endfor %}
+            {% for note in row.notes %}<div class="text-muted">{{ note }}</div>{% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">No data rows found in the file.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -3,16 +3,33 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
-    <h1 class="page-title">  {{ unit.model.name }} |  {{ unit.lot }} | {{ unit.chassis_no }}</h1>
+    <h1 class="page-title">{{ unit.model.name }} | {{ unit.lot|default:'—' }} | {{ unit.chassis_no }}</h1>
     <p class="page-sub mb-0">
-      
-      {% if unit.dealer %} · {{ unit.dealer.name }}{% endif %}
+      {% if unit.dealer %}{{ unit.dealer.name }}{% endif %}
+      {% if unit.vehicle_type %} · {{ unit.vehicle_type }}{% endif %}
     </p>
   </div>
   <div class="d-flex gap-2">
+    <a href="{% url 'unit-edit' unit.pk %}" class="btn btn-outline-dark">Edit unit</a>
     <a href="{% url 'redtag-create' %}" class="btn btn-danger">New Red Tag</a>
     <a href="{% url 'redtag-list' %}" class="btn btn-outline-secondary">Back to history</a>
   </div>
+</div>
+
+<div class="panel mb-3">
+  <h2 class="h6 text-uppercase text-muted mb-3">Unit profile</h2>
+  <dl class="row mb-0">
+    <dt class="col-sm-3">Customer</dt><dd class="col-sm-3">{{ unit.dealer.name|default:'—' }}</dd>
+    <dt class="col-sm-3">Model</dt><dd class="col-sm-3">{{ unit.model.name }}</dd>
+    <dt class="col-sm-3">Vehicle type</dt><dd class="col-sm-3">{{ unit.vehicle_type|default:'—' }}</dd>
+    <dt class="col-sm-3">Lot</dt><dd class="col-sm-3">{{ unit.lot|default:'—' }}</dd>
+    <dt class="col-sm-3">Chassis</dt><dd class="col-sm-3">{{ unit.chassis_no }}</dd>
+    <dt class="col-sm-3">Engine</dt><dd class="col-sm-3">{{ unit.engine_no|default:'—' }}</dd>
+    <dt class="col-sm-3">Arrival date</dt><dd class="col-sm-3">{{ unit.arrival_date|default:'—' }}</dd>
+    <dt class="col-sm-3">Colour</dt><dd class="col-sm-3">{{ unit.colour|default:'—' }}</dd>
+    <dt class="col-sm-3">Bond entry</dt><dd class="col-sm-3">{{ unit.bond_entry|default:'—' }}</dd>
+    <dt class="col-sm-3">Receiving status</dt><dd class="col-sm-3">{{ unit.receiving_status|default:'—' }}</dd>
+  </dl>
 </div>
 
 <div class="panel">
@@ -55,7 +72,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="text-muted">No issues recorded for this unit.</td></tr>
+        <tr><td colspan="9" class="text-muted">No issues recorded for this unit.</td></tr>
         {% endfor %}
       </tbody>
     </table>

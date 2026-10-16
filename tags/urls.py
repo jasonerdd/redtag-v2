@@ -2,16 +2,25 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.RedTagCreateView.as_view(), name='redtag-create'),
+    path('', views.DepartmentLandingView.as_view(), name='home'),
+    path('tags/new/', views.RedTagCreateView.as_view(), name='redtag-create'),
     path('tags/', views.VehicleListView.as_view(), name='redtag-list'),
     path('tags/units/<int:pk>/', views.VehicleDetailView.as_view(), name='vehicle-detail'),
     path('tags/export/', views.export_redtags, name='redtag-export'),
     path('tags/<int:pk>/', views.RedTagDetailView.as_view(), name='redtag-detail'),
     path('tags/<int:pk>/edit/', views.RedTagUpdateView.as_view(), name='redtag-update'),
     path('tags/<int:pk>/close/', views.close_redtag, name='redtag-close'),
+    path('units/', views.ReceivedUnitListView.as_view(), name='unit-list'),
+    path('units/receive/', views.UnitCreateView.as_view(), name='unit-create'),
+    path('units/<int:pk>/edit/', views.UnitUpdateView.as_view(), name='unit-edit'),
+    path('units/receive/upload/', views.receiving_upload, name='receiving-upload'),
+    path('units/receive/preview/', views.receiving_preview, name='receiving-preview'),
+    path('units/receive/template/', views.receiving_template, name='receiving-template'),
     path('audit/', views.AuditLogListView.as_view(), name='audit-list'),
     path('audit/<int:pk>/', views.AuditLogDetailView.as_view(), name='audit-detail'),
     path('ajax/load-stations/', views.load_stations, name='ajax-load-stations'),
     path('ajax/load-issue-types/', views.load_issue_types, name='ajax-load-issue-types'),
+    path('ajax/unit-lookup/', views.unit_lookup, name='ajax-unit-lookup'),
+    path('ajax/chassis-suggest/', views.chassis_suggest, name='ajax-chassis-suggest'),
     path('bootstrap/', views.bootstrap, name='bootstrap'),
 ]
