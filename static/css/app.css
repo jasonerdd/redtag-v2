@@ -513,3 +513,60 @@ a:hover {
 .login-wrap .page-title {
   margin-bottom: 0.15rem;
 }
+
+/* —— EOL checklist —— */
+.eol-progress {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--rt-muted);
+  background: #f3f5f8;
+  border: 1px solid var(--rt-line);
+  border-radius: var(--rt-radius-sm);
+  padding: 0.35rem 0.65rem;
+}
+
+.eol-progress.complete {
+  color: var(--rt-ok);
+  background: var(--rt-ok-soft);
+  border-color: #99f6e4;
+}
+
+.eol-checklist {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.eol-check-item {
+  border: 1px solid var(--rt-line);
+  border-radius: var(--rt-radius-sm);
+  padding: 0.7rem 0.9rem;
+  background: #fafbfc;
+}
+
+.eol-check-item .form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  min-height: 0;
+}
+
+.eol-check-item .form-check-input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.eol-check-item .form-check-input:checked {
+  background-color: var(--rt-red);
+  border-color: var(--rt-red);
+}
+
+.eol-check-item .form-check-label {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--rt-ink);
+}

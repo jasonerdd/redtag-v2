@@ -135,6 +135,50 @@ class Vehicle(models.Model):
         return reverse('vehicle-detail', kwargs={'pk': self.pk})
 
 
+class EolCheck(models.Model):
+    """End-of-line test checklist — one per received unit."""
+
+    vehicle = models.OneToOneField(
+        Vehicle, on_delete=models.CASCADE, related_name='eol_check'
+    )
+    wheel_alignment = models.BooleanField(default=False)
+    brake_test = models.BooleanField(default=False)
+    road_test = models.BooleanField(default=False)
+    shower_test = models.BooleanField(default=False)
+    air_conditioning = models.BooleanField(default=False)
+    diagnosis = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='eol_checks_updated',
+    )
+
+    CHECK_FIELDS = (
+        'wheel_alignment',
+        'brake_test',
+        'road_test',
+        'shower_test',
+        'air_conditioning',
+        'diagnosis',
+    )
+
+    class Meta:
+        verbose_name = 'EOL check'
+        verbose_name_plural = 'EOL checks'
+
+    def __str__(self):
+        done = self.completed_count
+        return f"EOL {self.vehicle.chassis_no} ({done}/6)"
+
+    @property
+    def completed_count(self):
+        return sum(1 for name in self.CHECK_FIELDS if getattr(self, name))
+
+    @property
+    def is_complete(self):
+        return self.completed_count == len(self.CHECK_FIELDS)
+
+
 class RedTag(TimeStampedModel):
     STATUS_PENDING = 'P'
     STATUS_CLOSED = 'C'

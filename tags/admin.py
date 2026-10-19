@@ -5,7 +5,7 @@ from import_export.widgets import ForeignKeyWidget
 
 from .models import (
     Dealer, VehicleModel, Section, Station, Category, IssueType,
-    Employee, Vehicle, RedTag, AuditLog
+    Employee, Vehicle, EolCheck, RedTag, AuditLog
 )
 
 
@@ -64,6 +64,21 @@ class VehicleAdmin(admin.ModelAdmin):
     list_filter = ['model', 'dealer', 'arrival_date']
     readonly_fields = ['received_at']
     autocomplete_fields = ['model', 'dealer', 'received_by']
+
+
+@admin.register(EolCheck)
+class EolCheckAdmin(admin.ModelAdmin):
+    list_display = [
+        'vehicle', 'wheel_alignment', 'brake_test', 'road_test',
+        'shower_test', 'air_conditioning', 'diagnosis', 'updated_at', 'updated_by',
+    ]
+    list_filter = [
+        'wheel_alignment', 'brake_test', 'road_test',
+        'shower_test', 'air_conditioning', 'diagnosis',
+    ]
+    search_fields = ['vehicle__chassis_no']
+    autocomplete_fields = ['vehicle', 'updated_by']
+    readonly_fields = ['updated_at']
 
 
 class RedTagResource(resources.ModelResource):

@@ -3,7 +3,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
-    RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee, Dealer
+    RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee, Dealer,
+    EolCheck,
 )
 from .receiving import find_vehicle_by_chassis, normalize_chassis
 
@@ -333,6 +334,30 @@ class UnitForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class EolCheckForm(forms.ModelForm):
+    class Meta:
+        model = EolCheck
+        fields = [
+            'wheel_alignment', 'brake_test', 'road_test',
+            'shower_test', 'air_conditioning', 'diagnosis',
+        ]
+        labels = {
+            'wheel_alignment': 'Wheel alignment',
+            'brake_test': 'Brake test',
+            'road_test': 'Road test',
+            'shower_test': 'Shower test',
+            'air_conditioning': 'Air conditioning',
+            'diagnosis': 'Diagnosis',
+        }
+        widgets = {
+            name: forms.CheckboxInput(attrs={'class': 'form-check-input'})
+            for name in (
+                'wheel_alignment', 'brake_test', 'road_test',
+                'shower_test', 'air_conditioning', 'diagnosis',
+            )
+        }
 
 
 class UnitFilterForm(forms.Form):

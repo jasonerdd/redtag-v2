@@ -12,8 +12,8 @@ from django.contrib import messages
 from django.utils import timezone
 from openpyxl import Workbook
 
-from .models import RedTag, Station, IssueType, Employee, Vehicle, AuditLog
-from .forms import RedTagForm, RedTagFilterForm, UnitForm, UnitFilterForm
+from .models import RedTag, Station, IssueType, Employee, Vehicle, AuditLog, EolCheck
+from .forms import RedTagForm, RedTagFilterForm, UnitForm, UnitFilterForm, EolCheckForm
 from .audit import log_red_tag_action
 from .receiving import (
     ParsedRow,
@@ -142,11 +142,6 @@ class RedTagDetailView(LoginRequiredMixin, DetailView):
     template_name = 'tags/redtag_detail.html'
     context_object_name = 'redtag'
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['employees'] = Employee.objects.filter(active=True)
-        return context
-
 
 class RedTagCreateView(LoginRequiredMixin, CreateView):
     model = RedTag
@@ -185,14 +180,23 @@ class RedTagUpdateView(LoginRequiredMixin, UpdateView):
 def close_redtag(request, pk):
     redtag = get_object_or_404(RedTag, pk=pk)
     if request.method == 'POST':
-        verified_by_id = request.POST.get('verified_by')
-        if not verified_by_id:
-            messages.error(request, 'Select who verified/cleared this tag.')
+        employee_no = (request.POST.get('verified_by_employee_no') or '').strip()
+        if not employee_no:
+            messages.error(request, 'Enter who verified/cleared this tag.')
+            return redirect('redtag-detail', pk=pk)
+
+        try:
+            verified_by = Employee.objects.get(employee_no=employee_no, active=True)
+        except Employee.DoesNotExist:
+            messages.error(
+                request,
+                f'No active staff member found with ID "{employee_no}".',
+            )
             return redirect('redtag-detail', pk=pk)
 
         redtag.status = RedTag.STATUS_CLOSED
         redtag.closing_date = timezone.localdate()
-        redtag.verified_by_id = verified_by_id
+        redtag.verified_by = verified_by
         remarks = request.POST.get('remarks', '').strip()
         if remarks:
             redtag.remarks = remarks
@@ -307,6 +311,51 @@ def load_issue_types(request):
 
 
 @login_required
+def eol_checks(request):
+    """EOL checklist for a received unit — lookup by chassis, save checkboxes."""
+    vehicle = None
+    eol = None
+    form = None
+    chassis_input = (request.POST.get('chassis_no') or request.GET.get('chassis') or '').strip()
+    lookup_error = ''
+
+    if request.method == 'POST':
+        chassis_input = (request.POST.get('chassis_no') or '').strip()
+        vehicle = find_vehicle_by_chassis(chassis_input)
+        if not vehicle:
+            lookup_error = 'unit does not exist'
+        else:
+            eol, _ = EolCheck.objects.get_or_create(vehicle=vehicle)
+            form = EolCheckForm(request.POST, instance=eol)
+            if form.is_valid():
+                check = form.save(commit=False)
+                check.updated_by = request.user
+                check.save()
+                messages.success(
+                    request,
+                    f'EOL checks saved for {vehicle.chassis_no} '
+                    f'({check.completed_count} of 6 complete).',
+                )
+                return redirect(f"{reverse('eol-checks')}?chassis={vehicle.chassis_no}")
+    elif chassis_input:
+        vehicle = find_vehicle_by_chassis(chassis_input)
+        if not vehicle:
+            lookup_error = 'unit does not exist'
+        else:
+            eol, _ = EolCheck.objects.get_or_create(vehicle=vehicle)
+            form = EolCheckForm(instance=eol)
+            chassis_input = vehicle.chassis_no
+
+    return render(request, 'tags/eol_checks.html', {
+        'vehicle': vehicle,
+        'eol': eol,
+        'form': form,
+        'chassis_input': chassis_input,
+        'lookup_error': lookup_error,
+    })
+
+
+@login_required
 @require_GET
 def unit_lookup(request):
     chassis = request.GET.get('chassis', '')
@@ -344,6 +393,24 @@ def chassis_suggest(request):
         'lot': v.lot or '',
         'customer': v.dealer.name if v.dealer_id else '',
     } for v in qs]
+    return JsonResponse({'results': results})
+
+
+@login_required
+@require_GET
+def employee_suggest(request):
+    q = (request.GET.get('q') or '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+    qs = (
+        Employee.objects.filter(active=True)
+        .filter(Q(employee_no__icontains=q) | Q(full_name__icontains=q))
+        .order_by('employee_no')[:20]
+    )
+    results = [{
+        'employee_no': e.employee_no,
+        'full_name': e.full_name,
+    } for e in qs]
     return JsonResponse({'results': results})
 
 

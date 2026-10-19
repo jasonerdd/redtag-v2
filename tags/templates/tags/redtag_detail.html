@@ -62,16 +62,15 @@
     {% if redtag.status == 'P' %}
     <div class="panel">
       <h2 class="h6 text-uppercase text-muted mb-3">Close this tag</h2>
-      <form method="post" action="{% url 'redtag-close' redtag.pk %}">
+      <form method="post" action="{% url 'redtag-close' redtag.pk %}" id="close-tag-form">
         {% csrf_token %}
-        <div class="mb-3">
-          <label class="form-label" for="verified_by">Cleared / Verified by</label>
-          <select name="verified_by" id="verified_by" class="form-select" required>
-            <option value="">Select employee</option>
-            {% for emp in employees %}
-              <option value="{{ emp.id }}">{{ emp.full_name }} ({{ emp.employee_no }})</option>
-            {% endfor %}
-          </select>
+        <div class="mb-3 position-relative">
+          <label class="form-label" for="verified_by_employee_no">Cleared / Verified by</label>
+          <input type="text" name="verified_by_employee_no" id="verified_by_employee_no"
+                 class="form-control" required autocomplete="off"
+                 placeholder="Type staff ID">
+          <div id="employee-suggest" class="chassis-suggest" hidden></div>
+          <div id="employee-lookup-msg" class="unit-lookup-msg"></div>
         </div>
         <div class="mb-3">
           <label class="form-label" for="remarks">Remarks</label>
@@ -83,4 +82,99 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if redtag.status == 'P' %}
+<script>
+  const empInput = document.getElementById('verified_by_employee_no');
+  const suggestBox = document.getElementById('employee-suggest');
+  const lookupMsg = document.getElementById('employee-lookup-msg');
+  let suggestTimer = null;
+  let activeSuggest = -1;
+  let lastResults = [];
+
+  function hideSuggest() {
+    if (!suggestBox) return;
+    suggestBox.hidden = true;
+    suggestBox.innerHTML = '';
+    activeSuggest = -1;
+  }
+
+  function pickEmployee(item) {
+    empInput.value = item.employee_no;
+    lookupMsg.textContent = item.full_name || '';
+    lookupMsg.className = 'unit-lookup-msg ok';
+    hideSuggest();
+  }
+
+  function showSuggest(results) {
+    lastResults = results || [];
+    if (!suggestBox) return;
+    if (!lastResults.length) {
+      hideSuggest();
+      return;
+    }
+    suggestBox.innerHTML = lastResults.map((item, idx) => {
+      const label = item.employee_no + (item.full_name ? ' · ' + item.full_name : '');
+      return '<button type="button" data-idx="' + idx + '">' + label + '</button>';
+    }).join('');
+    suggestBox.hidden = false;
+    activeSuggest = -1;
+    [...suggestBox.querySelectorAll('button')].forEach((btn, idx) => {
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        pickEmployee(lastResults[idx]);
+      });
+    });
+  }
+
+  async function fetchSuggestions() {
+    const value = empInput.value.trim();
+    if (value.length < 2) {
+      hideSuggest();
+      return;
+    }
+    try {
+      const response = await fetch('{% url "ajax-employee-suggest" %}?q=' + encodeURIComponent(value));
+      const data = await response.json();
+      showSuggest(data.results || []);
+    } catch (err) {
+      hideSuggest();
+    }
+  }
+
+  if (empInput) {
+    empInput.addEventListener('input', () => {
+      lookupMsg.textContent = '';
+      lookupMsg.className = 'unit-lookup-msg';
+      clearTimeout(suggestTimer);
+      suggestTimer = setTimeout(fetchSuggestions, 200);
+    });
+    empInput.addEventListener('keydown', (e) => {
+      if (!suggestBox || suggestBox.hidden) return;
+      const buttons = [...suggestBox.querySelectorAll('button')];
+      if (!buttons.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSuggest = Math.min(activeSuggest + 1, buttons.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSuggest = Math.max(activeSuggest - 1, 0);
+      } else if (e.key === 'Enter' && activeSuggest >= 0) {
+        e.preventDefault();
+        pickEmployee(lastResults[activeSuggest]);
+        return;
+      } else if (e.key === 'Escape') {
+        hideSuggest();
+        return;
+      } else {
+        return;
+      }
+      buttons.forEach((b, i) => b.classList.toggle('active', i === activeSuggest));
+    });
+    empInput.addEventListener('blur', () => setTimeout(hideSuggest, 150));
+  }
+</script>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,176 @@
+{% extends 'tags/base.html' %}
+{% block title %}EOL Checks · Red Tag{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">EOL Checks</h1>
+    <p class="page-sub mb-0">End-of-line tests for a received unit. Progress can be saved at any time.</p>
+  </div>
+</div>
+
+<div class="panel mb-3">
+  <label class="form-label" for="id_chassis_no">Chassis No.</label>
+  <div class="row g-2 align-items-start">
+    <div class="col-md-5 position-relative">
+      <input type="text" id="id_chassis_no" name="chassis_lookup" class="form-control"
+             value="{{ chassis_input }}" autocomplete="off"
+             placeholder="Type at least 3 characters…">
+      <div id="chassis-suggest" class="chassis-suggest" hidden></div>
+      <div id="chassis-lookup-msg" class="unit-lookup-msg {% if lookup_error %}error{% endif %}">
+        {% if lookup_error %}{{ lookup_error }}{% endif %}
+      </div>
+    </div>
+    <div class="col-md-auto">
+      <button type="button" class="btn btn-dark" id="btn-load-unit">Load unit</button>
+    </div>
+  </div>
+</div>
+
+{% if vehicle and form %}
+<div class="panel mb-3">
+  <h2 class="h6 text-uppercase text-muted mb-3">Unit</h2>
+  <dl class="row mb-0">
+    <dt class="col-sm-3">Chassis</dt><dd class="col-sm-3">{{ vehicle.chassis_no }}</dd>
+    <dt class="col-sm-3">Model</dt><dd class="col-sm-3">{{ vehicle.model.name }}</dd>
+    <dt class="col-sm-3">Lot</dt><dd class="col-sm-3">{{ vehicle.lot|default:'—' }}</dd>
+    <dt class="col-sm-3">Customer</dt><dd class="col-sm-3">{{ vehicle.dealer.name|default:'—' }}</dd>
+  </dl>
+</div>
+
+<div class="panel">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h2 class="h6 text-uppercase text-muted mb-0">Tests</h2>
+    <span class="eol-progress {% if eol.is_complete %}complete{% endif %}">
+      {% if eol.is_complete %}
+        All 6 complete
+      {% else %}
+        {{ eol.completed_count }} of 6 complete
+      {% endif %}
+    </span>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="chassis_no" value="{{ vehicle.chassis_no }}">
+    <ul class="eol-checklist list-unstyled mb-4">
+      {% for field in form %}
+      <li class="eol-check-item">
+        <div class="form-check">
+          {{ field }}
+          <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        </div>
+        {{ field.errors }}
+      </li>
+      {% endfor %}
+    </ul>
+    <button type="submit" class="btn btn-danger">Save checks</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const chassisInput = document.getElementById('id_chassis_no');
+  const suggestBox = document.getElementById('chassis-suggest');
+  const lookupMsg = document.getElementById('chassis-lookup-msg');
+  const loadBtn = document.getElementById('btn-load-unit');
+  let suggestTimer = null;
+  let activeSuggest = -1;
+
+  function hideSuggest() {
+    if (!suggestBox) return;
+    suggestBox.hidden = true;
+    suggestBox.innerHTML = '';
+    activeSuggest = -1;
+  }
+
+  function goToChassis(chassis) {
+    const value = (chassis || chassisInput.value || '').trim();
+    if (!value) {
+      lookupMsg.textContent = 'Enter a chassis number.';
+      lookupMsg.className = 'unit-lookup-msg error';
+      return;
+    }
+    window.location.href = '{% url "eol-checks" %}?chassis=' + encodeURIComponent(value);
+  }
+
+  function showSuggest(results) {
+    if (!suggestBox) return;
+    if (!results.length) {
+      hideSuggest();
+      return;
+    }
+    suggestBox.innerHTML = results.map((item, idx) => {
+      const label = item.chassis_no + (item.model ? ' · ' + item.model : '');
+      return '<button type="button" data-idx="' + idx + '">' + label + '</button>';
+    }).join('');
+    suggestBox.hidden = false;
+    activeSuggest = -1;
+    [...suggestBox.querySelectorAll('button')].forEach((btn, idx) => {
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        chassisInput.value = results[idx].chassis_no;
+        hideSuggest();
+        goToChassis(results[idx].chassis_no);
+      });
+    });
+  }
+
+  async function fetchSuggestions() {
+    const value = chassisInput.value.trim();
+    if (value.length < 3) {
+      hideSuggest();
+      return;
+    }
+    try {
+      const response = await fetch('/ajax/chassis-suggest/?q=' + encodeURIComponent(value));
+      const data = await response.json();
+      showSuggest(data.results || []);
+    } catch (err) {
+      hideSuggest();
+    }
+  }
+
+  if (chassisInput) {
+    chassisInput.addEventListener('input', () => {
+      lookupMsg.textContent = '';
+      lookupMsg.className = 'unit-lookup-msg';
+      clearTimeout(suggestTimer);
+      suggestTimer = setTimeout(fetchSuggestions, 200);
+    });
+    chassisInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (suggestBox && !suggestBox.hidden && activeSuggest >= 0) {
+          const buttons = [...suggestBox.querySelectorAll('button')];
+          buttons[activeSuggest].dispatchEvent(new Event('mousedown'));
+        } else {
+          hideSuggest();
+          goToChassis();
+        }
+        return;
+      }
+      if (!suggestBox || suggestBox.hidden) return;
+      const buttons = [...suggestBox.querySelectorAll('button')];
+      if (!buttons.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSuggest = Math.min(activeSuggest + 1, buttons.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSuggest = Math.max(activeSuggest - 1, 0);
+      } else if (e.key === 'Escape') {
+        hideSuggest();
+        return;
+      } else {
+        return;
+      }
+      buttons.forEach((b, i) => b.classList.toggle('active', i === activeSuggest));
+    });
+  }
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => goToChassis());
+  }
+</script>
+{% endblock %}
