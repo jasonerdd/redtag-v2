@@ -80,6 +80,17 @@ class Category(models.Model):
         return self.name
 
 
+class ReasonCode(models.Model):
+    """Master list from the Red Tag Report List sheet."""
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class IssueType(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='issue_types')
     name = models.CharField(max_length=150)
@@ -187,6 +198,13 @@ class RedTag(TimeStampedModel):
         (STATUS_CLOSED, 'Closed'),
     ]
 
+    ISSUE_PART = 'PART'
+    ISSUE_QUALITY = 'QUALITY'
+    ISSUE_KIND_CHOICES = [
+        (ISSUE_PART, 'Part'),
+        (ISSUE_QUALITY, 'Quality'),
+    ]
+
     LOCATION_CHOICES = [
         ('EOL', 'End of Line'),
         ('FINAL', 'Final'),
@@ -200,6 +218,9 @@ class RedTag(TimeStampedModel):
         Station, on_delete=models.PROTECT, related_name='red_tags', null=True, blank=True
     )
 
+    issue_kind = models.CharField(
+        max_length=10, choices=ISSUE_KIND_CHOICES, blank=True,
+    )
     part_number = models.CharField(max_length=100, blank=True)
     part_name = models.CharField(max_length=200, blank=True)
     quantity = models.PositiveIntegerField(null=True, blank=True)

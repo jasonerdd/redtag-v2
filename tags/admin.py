@@ -4,7 +4,7 @@ from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 
 from .models import (
-    Dealer, VehicleModel, Section, Station, Category, IssueType,
+    Dealer, VehicleModel, Section, Station, Category, IssueType, ReasonCode,
     Employee, Vehicle, EolCheck, RedTag, AuditLog
 )
 
@@ -37,6 +37,11 @@ class StationAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
+    search_fields = ['name']
+
+
+@admin.register(ReasonCode)
+class ReasonCodeAdmin(admin.ModelAdmin):
     search_fields = ['name']
 
 

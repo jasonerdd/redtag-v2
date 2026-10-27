@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from openpyxl import load_workbook
 
-from tags.models import Category, IssueType, RedTag, Section, Station
+from tags.models import Category, IssueType, ReasonCode, RedTag, Section, Station
 
 
 def _as_text(value):
@@ -132,13 +132,27 @@ class Command(BaseCommand):
                 )
                 issue_count += int(created)
 
+        reason_count = 0
+        seen_reason_header = False
+        for row in rows:
+            cell = _as_text(row[3] if len(row) > 3 else None)
+            if not seen_reason_header:
+                if cell.lower() == 'reason code':
+                    seen_reason_header = True
+                continue
+            if not cell:
+                break
+            _, created = ReasonCode.objects.get_or_create(name=cell)
+            reason_count += int(created)
+
         self.stdout.write(self.style.SUCCESS(
             f'Master sections={len(master_sections)}, '
             f'section/station pairs={len(unique_pairs)}, '
             f'remapped tags={remapped}, '
             f'history stations created={created_for_history}, '
             f'orphan stations removed={deleted_orphans}, '
-            f'new issue types={issue_count}'
+            f'new issue types={issue_count}, '
+            f'new reason codes={reason_count}'
         ))
         self.stdout.write(
             'Form sections will be those with stations from the List sheet Section/Station_Alias table.'

@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from .models import (
     RedTag, Station, IssueType, Vehicle, VehicleModel, Section, Category, Employee, Dealer,
-    EolCheck,
+    EolCheck, ReasonCode,
 )
 from .receiving import find_vehicle_by_chassis, normalize_chassis
 
@@ -24,14 +24,16 @@ class RedTagForm(forms.ModelForm):
     verified_by_employee_no = forms.CharField(
         max_length=20, required=False, label='Closed By Staff ID'
     )
+    reason_code = forms.ChoiceField(required=False, label='Reason code')
 
     class Meta:
         model = RedTag
         fields = [
             'date_raised', 'section', 'chassis_no',
             'model_display', 'lot_display', 'customer_display',
-            'issue_description', 'quantity',
-            'category', 'issue_type',
+            'issue_kind', 'part_name', 'part_number', 'quantity',
+            'issue_description',
+            'category', 'issue_type', 'reason_code',
             'raised_by_employee_no', 'station', 'status',
             'closing_date', 'verified_by_employee_no', 'remarks',
         ]
@@ -40,19 +42,32 @@ class RedTagForm(forms.ModelForm):
             'closing_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'issue_description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
             'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'part_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'part_number': forms.TextInput(attrs={'class': 'form-control'}),
             'remarks': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields['quantity'].required = True
+        self.fields['quantity'].required = False
+        self.fields['part_name'].required = False
+        self.fields['part_number'].required = False
         self.fields['category'].required = True
         self.fields['issue_type'].required = True
+        self.fields['reason_code'].required = False
         self.fields['station'].required = True
         self.fields['closing_date'].required = False
 
         placeholder = 'Select an option'
+        reason_names = list(ReasonCode.objects.order_by('name').values_list('name', flat=True))
+        current_reason = (self.instance.reason_code or '') if self.instance.pk else ''
+        if current_reason and current_reason not in reason_names:
+            reason_names.append(current_reason)
+        self.fields['reason_code'].choices = [('', placeholder)] + [
+            (name, name) for name in reason_names
+        ]
+
         for name in ('section', 'category', 'issue_type', 'station'):
             if hasattr(self.fields[name], 'empty_label'):
                 self.fields[name].empty_label = placeholder
@@ -64,6 +79,19 @@ class RedTagForm(forms.ModelForm):
         if not self.is_bound and not (self.instance and self.instance.pk):
             self.initial.setdefault('status', '')
 
+        self.fields['issue_kind'].choices = [('', placeholder)] + list(RedTag.ISSUE_KIND_CHOICES)
+        self.fields['issue_kind'].label = 'Issue relates to'
+        has_part_data = bool(
+            self.instance.pk and (
+                self.instance.part_name or self.instance.part_number or self.instance.quantity is not None
+            )
+        )
+        if not self.is_bound and self.instance.pk and not self.instance.issue_kind and has_part_data:
+            self.initial['issue_kind'] = RedTag.ISSUE_PART
+        self.fields['issue_kind'].required = not (
+            self.instance.pk and not self.instance.issue_kind and not has_part_data
+        )
+
         for name, field in self.fields.items():
             if name in self.Meta.widgets:
                 continue
@@ -71,6 +99,11 @@ class RedTagForm(forms.ModelForm):
                 field.widget.attrs.setdefault('class', 'form-select')
             else:
                 field.widget.attrs.setdefault('class', 'form-control')
+
+        for name in ('raised_by_employee_no', 'verified_by_employee_no', 'chassis_no'):
+            self.fields[name].widget.attrs['autocomplete'] = 'off'
+        for name in ('raised_by_employee_no', 'verified_by_employee_no'):
+            self.fields[name].widget.attrs['placeholder'] = 'Type staff ID or name'
 
         if self.instance.pk and self.instance.vehicle_id:
             vehicle = self.instance.vehicle
@@ -134,8 +167,6 @@ class RedTagForm(forms.ModelForm):
         # don't block editing (e.g. closing) them over data that was never captured.
         if self.instance.pk:
             instance = self.instance
-            if instance.quantity is None:
-                self.fields['quantity'].required = False
             if not instance.category_id:
                 self.fields['category'].required = False
             if not instance.issue_type_id:
@@ -211,6 +242,19 @@ class RedTagForm(forms.ModelForm):
 
         if category and issue_type and issue_type.category_id != category.id:
             self.add_error('issue_type', 'Selected issue type does not belong to the selected category.')
+
+        kind = cleaned_data.get('issue_kind')
+        if kind == RedTag.ISSUE_PART:
+            cleaned_data['part_name'] = (cleaned_data.get('part_name') or '').strip()
+            cleaned_data['part_number'] = (cleaned_data.get('part_number') or '').strip()
+        elif kind == RedTag.ISSUE_QUALITY:
+            cleaned_data['part_name'] = ''
+            cleaned_data['part_number'] = ''
+            cleaned_data['quantity'] = None
+        elif self.instance.pk:
+            cleaned_data['part_name'] = self.instance.part_name
+            cleaned_data['part_number'] = self.instance.part_number
+            cleaned_data['quantity'] = self.instance.quantity
 
         section = cleaned_data.get('section')
         station = cleaned_data.get('station')

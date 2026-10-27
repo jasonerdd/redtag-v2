@@ -27,10 +27,17 @@
         <dt class="col-sm-4">Date raised</dt><dd class="col-sm-8">{{ redtag.date_raised }}</dd>
         <dt class="col-sm-4">Section</dt><dd class="col-sm-8">{{ redtag.section.code }}</dd>
         <dt class="col-sm-4">Station</dt><dd class="col-sm-8">{{ redtag.station.name|default:'—' }}</dd>
+        <dt class="col-sm-4">Issue relates to</dt>
+        <dd class="col-sm-8">{{ redtag.get_issue_kind_display|default:'—' }}</dd>
+        {% if redtag.issue_kind == 'PART' or redtag.part_name or redtag.part_number or redtag.quantity %}
+        <dt class="col-sm-4">Part name</dt><dd class="col-sm-8">{{ redtag.part_name|default:'—' }}</dd>
+        <dt class="col-sm-4">Part number</dt><dd class="col-sm-8">{{ redtag.part_number|default:'—' }}</dd>
         <dt class="col-sm-4">Quantity</dt><dd class="col-sm-8">{{ redtag.quantity|default:'—' }}</dd>
+        {% endif %}
         <dt class="col-sm-4">Description</dt><dd class="col-sm-8">{{ redtag.issue_description }}</dd>
         <dt class="col-sm-4">Category</dt><dd class="col-sm-8">{{ redtag.category.name|default:'—' }}</dd>
         <dt class="col-sm-4">Issue type</dt><dd class="col-sm-8">{{ redtag.issue_type.name|default:'—' }}</dd>
+        <dt class="col-sm-4">Reason code</dt><dd class="col-sm-8">{{ redtag.reason_code|default:'—' }}</dd>
         <dt class="col-sm-4">Remarks</dt><dd class="col-sm-8">{{ redtag.remarks|default:'—' }}</dd>
       </dl>
     </div>

@@ -6,7 +6,7 @@ from django.db import transaction
 from openpyxl import load_workbook
 
 from tags.models import (
-    Category, Dealer, Employee, IssueType, RedTag, Section, Station,
+    Category, Dealer, Employee, IssueType, ReasonCode, RedTag, Section, Station,
     Vehicle, VehicleModel,
 )
 
@@ -160,6 +160,17 @@ class Command(BaseCommand):
                 issue_name = _as_text(row[9 + col_idx] if len(row) > 9 + col_idx else None)
                 if issue_name:
                     IssueType.objects.get_or_create(category=category, name=issue_name)
+
+        seen_reason_header = False
+        for row in rows:
+            cell = _as_text(row[3] if len(row) > 3 else None)
+            if not seen_reason_header:
+                if cell.lower() == 'reason code':
+                    seen_reason_header = True
+                continue
+            if not cell:
+                break
+            ReasonCode.objects.get_or_create(name=cell)
 
         # Dealers / models from List columns F-H
         for row in rows:
