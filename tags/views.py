@@ -12,8 +12,11 @@ from django.contrib import messages
 from django.utils import timezone
 from openpyxl import Workbook
 
-from .models import RedTag, Station, IssueType, Employee, Vehicle, AuditLog, EolCheck
-from .forms import RedTagForm, RedTagFilterForm, UnitForm, UnitFilterForm, EolCheckForm
+from .models import (
+    RedTag, Station, IssueType, Employee, Vehicle, AuditLog, EolCheck,
+    Section, VehicleModel, Dealer,
+)
+from .forms import RedTagForm, UnitForm, UnitFilterForm, EolCheckForm
 from .audit import log_red_tag_action
 from .receiving import (
     ParsedRow,
@@ -33,6 +36,20 @@ from django.views.decorators.http import require_GET
 
 class DepartmentLandingView(LoginRequiredMixin, TemplateView):
     template_name = 'tags/landing.html'
+
+
+HISTORY_FILTERS = [
+    {'key': 'status', 'label': 'Status', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'section', 'label': 'Section', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'station', 'label': 'Station', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'model', 'label': 'Model', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'customer', 'label': 'Customer', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'lot', 'label': 'Lot', 'kind': 'ajax', 'placeholder': 'Type a lot', 'min': 2, 'suggest': 'lot'},
+    {'key': 'chassis', 'label': 'Chassis', 'kind': 'ajax', 'placeholder': 'Type a chassis', 'min': 3, 'suggest': 'chassis'},
+    {'key': 'date_from', 'label': 'From', 'kind': 'date', 'placeholder': ''},
+    {'key': 'date_to', 'label': 'To', 'kind': 'date', 'placeholder': ''},
+    {'key': 'q', 'label': 'Search', 'kind': 'ajax', 'placeholder': 'Chassis, model, lot, issue', 'min': 2, 'suggest': 'search'},
+]
 
 
 class VehicleListView(LoginRequiredMixin, ListView):
@@ -112,9 +129,61 @@ class VehicleListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['filter_form'] = RedTagFilterForm(self.request.GET or None)
-        context['query'] = self.request.GET.get('q', '')
+        lookups = self._filter_lookups()
+        chips = []
+        for spec in HISTORY_FILTERS:
+            value = (self.request.GET.get(spec['key']) or '').strip()
+            if not value:
+                continue
+            chip = {**spec, 'value': value, 'display': value}
+            if spec['kind'] == 'choice':
+                chip['display'] = next(
+                    (opt['label'] for opt in lookups.get(spec['key'], []) if opt['value'] == value),
+                    value,
+                )
+            chips.append(chip)
+        context['filter_catalog'] = HISTORY_FILTERS
+        context['filter_lookups'] = lookups
+        context['filter_chips'] = chips
+        context['active_filter_keys'] = [chip['key'] for chip in chips]
+        query = self.request.GET.copy()
+        query.pop('page', None)
+        context['filter_query'] = query.urlencode()
         return context
+
+    def _filter_lookups(self):
+        stations = (
+            Station.objects.filter(show_in_form=True)
+            .select_related('section')
+            .order_by('section__code', 'name')
+        )
+        return {
+            'status': [
+                {'value': RedTag.STATUS_PENDING, 'label': 'Pending'},
+                {'value': RedTag.STATUS_CLOSED, 'label': 'Closed'},
+            ],
+            'section': [
+                {'value': str(row.id), 'label': row.code}
+                for row in Section.objects.filter(show_in_form=True).order_by('code')
+            ],
+            'station': [
+                {
+                    'value': str(row.id),
+                    'label': f'{row.section.code} / {row.name}' if row.section_id else row.name,
+                    'name': row.name,
+                    'section': str(row.section_id or ''),
+                }
+                for row in stations
+            ],
+            'model': [
+                {'value': str(row.id), 'label': row.name}
+                for row in VehicleModel.objects.order_by('name')
+            ],
+            'customer': [
+                {'value': str(row.id), 'label': row.name}
+                for row in Dealer.objects.order_by('name')
+            ],
+        }
 
 
 class VehicleDetailView(LoginRequiredMixin, DetailView):
@@ -394,6 +463,56 @@ def chassis_suggest(request):
         'customer': v.dealer.name if v.dealer_id else '',
     } for v in qs]
     return JsonResponse({'results': results})
+
+
+@login_required
+@require_GET
+def history_suggest(request):
+    kind = (request.GET.get('kind') or '').strip()
+    q = (request.GET.get('q') or '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+
+    if kind == 'lot':
+        lots = (
+            Vehicle.objects.exclude(lot='')
+            .filter(lot__icontains=q)
+            .order_by('lot')
+            .values_list('lot', flat=True)
+            .distinct()[:20]
+        )
+        return JsonResponse({'results': [{'value': lot, 'label': lot} for lot in lots]})
+
+    if kind == 'search':
+        results = []
+        vehicles = (
+            Vehicle.objects.filter(chassis_no__icontains=q)
+            .select_related('model')
+            .order_by('chassis_no')[:8]
+        )
+        for vehicle in vehicles:
+            results.append({
+                'value': vehicle.chassis_no,
+                'label': vehicle.chassis_no,
+                'hint': vehicle.model.name if vehicle.model_id else 'Chassis',
+            })
+        for name in (
+            VehicleModel.objects.filter(name__icontains=q)
+            .order_by('name')
+            .values_list('name', flat=True)[:6]
+        ):
+            results.append({'value': name, 'label': name, 'hint': 'Model'})
+        for lot in (
+            Vehicle.objects.exclude(lot='')
+            .filter(lot__icontains=q)
+            .order_by('lot')
+            .values_list('lot', flat=True)
+            .distinct()[:6]
+        ):
+            results.append({'value': lot, 'label': lot, 'hint': 'Lot'})
+        return JsonResponse({'results': results})
+
+    return JsonResponse({'results': []})
 
 
 @login_required

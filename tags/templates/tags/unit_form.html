@@ -12,13 +12,12 @@
 {% endblock %}
 {% block content %}
 <div class="mb-3">
-  <h1 class="page-title">{% if object %}Edit unit {{ object.chassis_no }}{% else %}Receive unit{% endif %}</h1>
+  <h1 class="page-title">{% if object %}Edit unit {{ object.chassis_no }}{% else %}Create new unit{% endif %}</h1>
   <p class="page-sub">
     {% if object %}
       Update this unit's receiving profile.
     {% else %}
-      Enter one unit directly when you have not filled the receiving sheet.
-      Customer is taken from the selected model.
+      Record the unit's receiving details.
     {% endif %}
   </p>
 </div>
@@ -49,7 +48,7 @@
       <div class="col-md-4">
         <label class="form-label" for="{{ form.chassis_no.id_for_label }}">Chassis No. <span class="text-danger">*</span></label>
         {{ form.chassis_no }}
-        <div class="form-text">Last 7 characters are stored (full VIN is shortened automatically).</div>
+        <div class="form-text">(Last 7 characters are stored.)</div>
         {{ form.chassis_no.errors }}
       </div>
       <div class="col-md-4">

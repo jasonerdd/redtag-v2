@@ -343,6 +343,93 @@ a:hover {
   background: #f3f5f8;
 }
 
+.chassis-suggest .suggest-hint {
+  float: right;
+  margin-left: 0.75rem;
+  color: var(--rt-muted);
+  font-size: 0.75rem;
+}
+
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.history-filter-chips {
+  display: flex;
+  flex: 1 1 16rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.history-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.4rem;
+  flex: 1 1 16rem;
+  max-width: min(22rem, 100%);
+  min-width: 0;
+  padding: 0.2rem 0.45rem 0.2rem 0.7rem;
+  background: #f3f5f8;
+  border: 1px solid var(--rt-line);
+  border-radius: var(--rt-radius-sm);
+}
+
+.history-filter.is-invalid {
+  border-color: var(--rt-red);
+}
+
+.history-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rt-muted);
+  white-space: nowrap;
+}
+
+.history-filter-input {
+  min-width: 0;
+}
+
+.history-filter .form-control {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 2rem;
+  padding: 0.15rem 0.35rem;
+}
+
+.history-filter .form-control:focus {
+  background: #fff;
+  box-shadow: none;
+}
+
+.history-filter .filter-error {
+  display: none;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 0.15rem 0.2rem;
+  color: var(--rt-red);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.history-filter.is-invalid .filter-error {
+  display: block;
+}
+
+.history-filter-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
 .unit-lookup-msg {
   font-size: 0.875rem;
   margin-top: 0.3rem;

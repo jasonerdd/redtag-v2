@@ -23,6 +23,7 @@ urlpatterns = [
     path('ajax/load-issue-types/', views.load_issue_types, name='ajax-load-issue-types'),
     path('ajax/unit-lookup/', views.unit_lookup, name='ajax-unit-lookup'),
     path('ajax/chassis-suggest/', views.chassis_suggest, name='ajax-chassis-suggest'),
+    path('ajax/history-suggest/', views.history_suggest, name='ajax-history-suggest'),
     path('ajax/employee-suggest/', views.employee_suggest, name='ajax-employee-suggest'),
     path('bootstrap/', views.bootstrap, name='bootstrap'),
 ]
