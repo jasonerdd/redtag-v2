@@ -1,15 +1,6 @@
 {% extends 'tags/receiving_base.html' %}
+{% load static %}
 {% block title %}Received Units · Receiving{% endblock %}
-{% block extra_css %}
-<link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<style>
-  .ts-wrapper.form-select .ts-control {
-    padding: 0.375rem 0.75rem;
-    min-height: calc(1.5em + 0.75rem + 2px);
-  }
-  .ts-dropdown .option[data-value=""] { display: none; }
-</style>
-{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
@@ -22,38 +13,7 @@
   </div>
 </div>
 
-<div class="panel mb-3">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.customer.id_for_label }}">Customer</label>
-      {{ filter_form.customer }}
-    </div>
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.model.id_for_label }}">Model</label>
-      {{ filter_form.model }}
-    </div>
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.lot.id_for_label }}">Lot</label>
-      {{ filter_form.lot }}
-    </div>
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.chassis.id_for_label }}">Chassis</label>
-      {{ filter_form.chassis }}
-    </div>
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.date_from.id_for_label }}">From</label>
-      {{ filter_form.date_from }}
-    </div>
-    <div class="col-md-2">
-      <label class="form-label" for="{{ filter_form.date_to.id_for_label }}">To</label>
-      {{ filter_form.date_to }}
-    </div>
-    <div class="col-12 d-flex gap-2">
-      <button class="btn btn-dark" type="submit">Apply filters</button>
-      <a class="btn btn-outline-secondary" href="{% url 'unit-list' %}">Reset</a>
-    </div>
-  </form>
-</div>
+{% include 'tags/_filter_menu.html' %}
 
 <div class="panel">
   <div class="table-responsive">
@@ -100,11 +60,11 @@
   <nav class="mt-3">
     <ul class="pagination mb-0">
       {% if page_obj.has_previous %}
-        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">Previous</a></li>
       {% endif %}
       <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
       {% if page_obj.has_next %}
-        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">Next</a></li>
       {% endif %}
     </ul>
   </nav>
@@ -113,20 +73,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
-<script>
-  const PLACEHOLDER = 'Select an option';
-  function enhanceSelect(selectEl) {
-    if (!selectEl || selectEl.tomselect) return;
-    if (![...selectEl.options].some(opt => opt.value === '')) {
-      selectEl.insertBefore(new Option(PLACEHOLDER, '', false, false), selectEl.firstChild);
-    }
-    new TomSelect(selectEl, {
-      create: false, maxOptions: null, allowEmptyOption: true,
-      placeholder: PLACEHOLDER, sortField: { field: 'text', direction: 'asc' },
-    });
-  }
-  enhanceSelect(document.getElementById('id_customer'));
-  enhanceSelect(document.getElementById('id_model'));
-</script>
+<script src="{% static 'js/filter_menu.js' %}"></script>
 {% endblock %}

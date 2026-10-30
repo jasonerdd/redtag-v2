@@ -1,0 +1,44 @@
+<div class="panel mb-3">
+  <form method="get" id="history-filter-form" class="history-filters" autocomplete="off">
+    <div class="dropdown">
+      <button class="btn btn-outline-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Add filter
+      </button>
+      <ul class="dropdown-menu">
+        {% for spec in filter_catalog %}
+        <li {% if spec.key in active_filter_keys %}hidden{% endif %}>
+          <button type="button" class="dropdown-item" data-add-filter="{{ spec.key }}">
+            {{ spec.label }}
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div id="filter-chips" class="history-filter-chips">
+      {% for chip in filter_chips %}
+      <div class="history-filter" data-key="{{ chip.key }}" data-kind="{{ chip.kind }}">
+        <span class="history-filter-label">{{ chip.label }}</span>
+        <div class="history-filter-input position-relative">
+          {% if chip.kind == 'date' %}
+          <input type="date" name="{{ chip.key }}" value="{{ chip.value }}" class="form-control">
+          {% elif chip.kind == 'choice' %}
+          <input type="hidden" name="{{ chip.key }}" value="{{ chip.value }}">
+          <input type="text" class="form-control filter-text" value="{{ chip.display }}" autocomplete="off" placeholder="{{ chip.placeholder }}">
+          {% else %}
+          <input type="text" name="{{ chip.key }}" value="{{ chip.value }}" class="form-control filter-text" autocomplete="off" placeholder="{{ chip.placeholder }}">
+          {% endif %}
+          <div class="chassis-suggest" hidden></div>
+        </div>
+        <button type="button" class="btn-close filter-remove" aria-label="Remove {{ chip.label }} filter"></button>
+        <p class="filter-error" hidden>Choose a match from the list.</p>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="history-filter-actions" id="filter-actions" {% if not filter_chips %}hidden{% endif %}>
+      <button class="btn btn-dark" type="submit">Apply</button>
+      <a class="btn btn-outline-secondary" href="{{ filter_reset_url }}">Reset</a>
+    </div>
+  </form>
+</div>
+{{ filter_catalog|json_script:"filter-catalog" }}
+{{ filter_lookups|json_script:"filter-lookups" }}

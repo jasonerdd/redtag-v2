@@ -1,0 +1,89 @@
+{% extends 'tags/receiving_base.html' %}
+{% block title %}Entry Records · Receiving{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="page-title">Entry Records</h1>
+    <p class="page-sub mb-0">Record of units added, edited, and uploaded</p>
+  </div>
+</div>
+
+<div class="panel mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label" for="id_action">Action</label>
+      <select name="action" id="id_action" class="form-select">
+        <option value="">Select an option</option>
+        {% for value, label in action_choices %}
+          <option value="{{ value }}" {% if selected_action == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="id_chassis">Chassis</label>
+      <input type="text" name="chassis" id="id_chassis" class="form-control" value="{{ chassis }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="id_q">Search</label>
+      <input type="text" name="q" id="id_q" class="form-control" value="{{ query }}" placeholder="User, chassis, summary...">
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-dark" type="submit">Filter</button>
+      <a class="btn btn-outline-secondary" href="{% url 'receiving-audit-list' %}">Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Action</th>
+          <th>User</th>
+          <th>Chassis</th>
+          <th>Summary</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="text-nowrap">{{ log.timestamp|date:"Y-m-d H:i" }}</td>
+          <td>{{ log.get_action_display }}</td>
+          <td>{{ log.username|default:'—' }}</td>
+          <td>
+            {% if log.vehicle_id %}
+              <a href="{% url 'vehicle-detail' log.vehicle_id %}">{{ log.chassis_no }}</a>
+            {% else %}
+              {{ log.chassis_no|default:'—' }}
+            {% endif %}
+          </td>
+          <td>{{ log.summary|truncatechars:80 }}</td>
+          <td>
+            <a href="{% url 'receiving-audit-detail' log.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">No entry records yet. New units and sheet uploads will appear here.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+  <nav class="mt-3">
+    <ul class="pagination mb-0">
+      {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a></li>
+      {% endif %}
+      <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+      {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

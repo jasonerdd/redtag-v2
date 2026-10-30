@@ -1,0 +1,47 @@
+{% extends 'tags/receiving_base.html' %}
+{% block title %}Entry Record #{{ log.pk }} · Receiving{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="page-title">Entry record #{{ log.pk }}</h1>
+    <p class="page-sub mb-0">{{ log.get_action_display }} · {{ log.timestamp|date:"Y-m-d H:i:s" }}</p>
+  </div>
+  <a href="{% url 'receiving-audit-list' %}" class="btn btn-outline-secondary">Back to entry records</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="panel">
+      <h2 class="h6 text-uppercase text-muted mb-3">Event</h2>
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Action</dt><dd class="col-sm-8">{{ log.get_action_display }}</dd>
+        <dt class="col-sm-4">When</dt><dd class="col-sm-8">{{ log.timestamp|date:"Y-m-d H:i:s" }}</dd>
+        <dt class="col-sm-4">User</dt><dd class="col-sm-8">{{ log.username|default:'—' }}</dd>
+        <dt class="col-sm-4">IP</dt><dd class="col-sm-8">{{ log.ip_address|default:'—' }}</dd>
+        <dt class="col-sm-4">Chassis</dt>
+        <dd class="col-sm-8">
+          {% if log.vehicle_id %}
+            <a href="{% url 'vehicle-detail' log.vehicle_id %}">{{ log.chassis_no }}</a>
+          {% else %}
+            {{ log.chassis_no|default:'—' }}
+          {% endif %}
+        </dd>
+        <dt class="col-sm-4">Summary</dt><dd class="col-sm-8">{{ log.summary }}</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="panel">
+      <h2 class="h6 text-uppercase text-muted mb-3">Form snapshot</h2>
+      <dl class="row mb-0">
+        {% for key, value in log.details.items %}
+          <dt class="col-sm-4">{{ key }}</dt>
+          <dd class="col-sm-8">{{ value|default:'—' }}</dd>
+        {% empty %}
+          <dd class="col-12 text-muted">No snapshot stored.</dd>
+        {% endfor %}
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}

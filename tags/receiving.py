@@ -11,7 +11,8 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
-from .models import Dealer, Vehicle, VehicleModel
+from .audit import log_receiving_action
+from .models import AuditLog, Dealer, Vehicle, VehicleModel
 
 HEADER_ALIASES = {
     'customer': ('customer', 'dealer'),
@@ -290,7 +291,7 @@ def parse_receiving_workbook(file_obj) -> list[ParsedRow]:
     return results
 
 
-def apply_receiving_rows(rows: list[ParsedRow], user=None) -> dict[str, int]:
+def apply_receiving_rows(rows: list[ParsedRow], user=None, request=None) -> dict[str, int]:
     """Persist new/update rows. Returns counts."""
     created = updated = skipped = 0
     now = timezone.now()
@@ -346,11 +347,20 @@ def apply_receiving_rows(rows: list[ParsedRow], user=None) -> dict[str, int]:
                 # Keep existing chassis_no as-is for updates (may be full VIN)
                 vehicle.save()
                 updated += 1
+                log_receiving_action(
+                    request, vehicle, AuditLog.ACTION_UPDATED, source='sheet',
+                )
             else:
-                Vehicle.objects.update_or_create(
+                vehicle, was_created = Vehicle.objects.update_or_create(
                     chassis_no=row.chassis_no,
                     defaults=defaults,
                 )
-                created += 1
+                if was_created:
+                    created += 1
+                    action = AuditLog.ACTION_CREATED
+                else:
+                    updated += 1
+                    action = AuditLog.ACTION_UPDATED
+                log_receiving_action(request, vehicle, action, source='sheet')
 
     return {'created': created, 'updated': updated, 'skipped': skipped}

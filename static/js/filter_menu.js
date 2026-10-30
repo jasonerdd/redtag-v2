@@ -1,0 +1,264 @@
+const CATALOG = JSON.parse(document.getElementById('filter-catalog').textContent);
+const LOOKUPS = JSON.parse(document.getElementById('filter-lookups').textContent);
+const FILTERS = Object.fromEntries(CATALOG.map(spec => [spec.key, spec]));
+const form = document.getElementById('history-filter-form');
+const chipsEl = document.getElementById('filter-chips');
+const actionsEl = document.getElementById('filter-actions');
+const ORDER = CATALOG.map(spec => spec.key);
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[ch]);
+}
+
+function chipFor(key) {
+  return chipsEl.querySelector('.history-filter[data-key="' + key + '"]');
+}
+
+function choiceValue(key) {
+  const chip = chipFor(key);
+  const hidden = chip && chip.querySelector('input[type="hidden"]');
+  return hidden ? hidden.value : '';
+}
+
+function optionsFor(key) {
+  const rows = LOOKUPS[key] || [];
+  if (key !== 'station') return rows;
+  const sectionId = choiceValue('section');
+  if (!sectionId) return rows;
+  return rows.filter(row => row.section === sectionId);
+}
+
+function resolveChoice(key, text) {
+  const query = text.trim().toLowerCase();
+  if (!query) return null;
+  const options = optionsFor(key);
+  const exact = options.find(opt =>
+    opt.label.toLowerCase() === query || String(opt.value).toLowerCase() === query
+  );
+  if (exact) return exact;
+  const starts = options.filter(opt => opt.label.toLowerCase().startsWith(query));
+  return starts.length === 1 ? starts[0] : null;
+}
+
+function setInvalid(chip, invalid) {
+  chip.classList.toggle('is-invalid', invalid);
+  const error = chip.querySelector('.filter-error');
+  if (error) error.hidden = !invalid;
+}
+
+function hideSuggest(chip) {
+  const box = chip.querySelector('.chassis-suggest');
+  if (!box) return;
+  box.hidden = true;
+  box.innerHTML = '';
+  chip._active = -1;
+  chip._results = [];
+}
+
+function syncMenu() {
+  document.querySelectorAll('[data-add-filter]').forEach(button => {
+    button.parentElement.hidden = Boolean(chipFor(button.dataset.addFilter));
+  });
+}
+
+function syncActions() {
+  actionsEl.hidden = chipsEl.children.length === 0;
+}
+
+function alignStation() {
+  const station = chipFor('station');
+  if (!station) return;
+  const hidden = station.querySelector('input[type="hidden"]');
+  const text = station.querySelector('.filter-text');
+  if (!hidden || !hidden.value) return;
+  const match = optionsFor('station').find(opt => opt.value === hidden.value);
+  if (!match) {
+    hidden.value = '';
+    text.value = '';
+    return;
+  }
+  text.value = match.label;
+}
+
+function pick(chip, item) {
+  const text = chip.querySelector('.filter-text');
+  const hidden = chip.querySelector('input[type="hidden"]');
+  if (hidden) {
+    hidden.value = item.value;
+    text.value = item.label;
+  } else {
+    text.value = item.value;
+  }
+  setInvalid(chip, false);
+  hideSuggest(chip);
+  if (chip.dataset.key === 'section') alignStation();
+}
+
+function showSuggest(chip, results) {
+  const box = chip.querySelector('.chassis-suggest');
+  chip._results = results || [];
+  chip._active = -1;
+  if (!box || !chip._results.length) {
+    hideSuggest(chip);
+    return;
+  }
+  box.innerHTML = chip._results.map(item => {
+    const hint = item.hint ? '<span class="suggest-hint">' + esc(item.hint) + '</span>' : '';
+    return '<button type="button">' + esc(item.label) + hint + '</button>';
+  }).join('');
+  box.hidden = false;
+  [...box.querySelectorAll('button')].forEach((button, index) => {
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      pick(chip, chip._results[index]);
+    });
+  });
+}
+
+async function fetchSuggest(chip) {
+  const meta = FILTERS[chip.dataset.key];
+  const text = chip.querySelector('.filter-text').value.trim();
+  if (meta.kind === 'choice') {
+    const query = text.toLowerCase();
+    const matches = optionsFor(chip.dataset.key).filter(opt =>
+      !query || opt.label.toLowerCase().includes(query)
+    );
+    showSuggest(chip, matches.slice(0, 30));
+    return;
+  }
+  if (text.length < (meta.min || 2)) {
+    hideSuggest(chip);
+    return;
+  }
+  const url = meta.suggest === 'chassis'
+    ? '/ajax/chassis-suggest/?q=' + encodeURIComponent(text)
+    : '/ajax/history-suggest/?kind=' + encodeURIComponent(meta.suggest) + '&q=' + encodeURIComponent(text);
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    let results = data.results || [];
+    if (meta.suggest === 'chassis') {
+      results = results.map(item => ({
+        value: item.chassis_no,
+        label: item.model ? item.chassis_no + ' · ' + item.model : item.chassis_no,
+      }));
+    }
+    showSuggest(chip, results);
+  } catch (err) {
+    hideSuggest(chip);
+  }
+}
+
+function bindChip(chip) {
+  const remove = chip.querySelector('.filter-remove');
+  remove.addEventListener('click', () => {
+    chip.remove();
+    syncMenu();
+    syncActions();
+  });
+  const text = chip.querySelector('.filter-text');
+  if (!text) return;
+  let timer = null;
+  text.addEventListener('focus', () => fetchSuggest(chip));
+  text.addEventListener('input', () => {
+    const hidden = chip.querySelector('input[type="hidden"]');
+    if (hidden) hidden.value = '';
+    setInvalid(chip, false);
+    clearTimeout(timer);
+    timer = setTimeout(() => fetchSuggest(chip), 200);
+  });
+  text.addEventListener('keydown', (event) => {
+    const buttons = [...chip.querySelectorAll('.chassis-suggest button')];
+    if (event.key === 'ArrowDown' && buttons.length) {
+      event.preventDefault();
+      chip._active = Math.min((chip._active ?? -1) + 1, buttons.length - 1);
+    } else if (event.key === 'ArrowUp' && buttons.length) {
+      event.preventDefault();
+      chip._active = Math.max((chip._active ?? 0) - 1, 0);
+    } else if (event.key === 'Escape') {
+      hideSuggest(chip);
+      return;
+    } else if (event.key === 'Enter' && buttons.length && (chip._active ?? -1) >= 0) {
+      event.preventDefault();
+      pick(chip, chip._results[chip._active]);
+      return;
+    } else if (event.key === 'Enter' && buttons.length === 1) {
+      event.preventDefault();
+      pick(chip, chip._results[0]);
+      return;
+    } else {
+      return;
+    }
+    buttons.forEach((button, index) => button.classList.toggle('active', index === chip._active));
+  });
+  text.addEventListener('blur', () => setTimeout(() => hideSuggest(chip), 150));
+}
+
+function addChip(key) {
+  if (chipFor(key)) return;
+  const meta = FILTERS[key];
+  const chip = document.createElement('div');
+  chip.className = 'history-filter';
+  chip.dataset.key = key;
+  chip.dataset.kind = meta.kind;
+  const field = meta.kind === 'date'
+    ? '<input type="date" name="' + esc(key) + '" class="form-control">'
+    : meta.kind === 'choice'
+      ? '<input type="hidden" name="' + esc(key) + '" value="">' +
+        '<input type="text" class="form-control filter-text" autocomplete="off" placeholder="' + esc(meta.placeholder) + '">'
+      : '<input type="text" name="' + esc(key) + '" class="form-control filter-text" autocomplete="off" placeholder="' + esc(meta.placeholder) + '">';
+  chip.innerHTML =
+    '<span class="history-filter-label">' + esc(meta.label) + '</span>' +
+    '<div class="history-filter-input position-relative">' + field +
+    '<div class="chassis-suggest" hidden></div></div>' +
+    '<button type="button" class="btn-close filter-remove" aria-label="Remove ' + esc(meta.label) + ' filter"></button>' +
+    '<p class="filter-error" hidden>Choose a match from the list.</p>';
+  const index = ORDER.indexOf(key);
+  const before = [...chipsEl.children].find(el => ORDER.indexOf(el.dataset.key) > index);
+  chipsEl.insertBefore(chip, before || null);
+  bindChip(chip);
+  syncMenu();
+  syncActions();
+  const focus = chip.querySelector('.filter-text, input[type="date"]');
+  if (focus) focus.focus();
+}
+
+document.querySelectorAll('[data-add-filter]').forEach(button => {
+  button.addEventListener('click', () => addChip(button.dataset.addFilter));
+});
+[...chipsEl.children].forEach(bindChip);
+
+form.addEventListener('submit', (event) => {
+  let blocked = false;
+  [...chipsEl.children].forEach(chip => {
+    if (chip.dataset.kind === 'date') return;
+    const text = chip.querySelector('.filter-text');
+    const hidden = chip.querySelector('input[type="hidden"]');
+    const raw = text.value.trim();
+    if (!raw) {
+      text.disabled = true;
+      if (hidden) hidden.disabled = true;
+      return;
+    }
+    if (chip.dataset.kind !== 'choice') return;
+    if (!hidden.value) {
+      const match = resolveChoice(chip.dataset.key, raw);
+      if (!match) {
+        setInvalid(chip, true);
+        blocked = true;
+        return;
+      }
+      hidden.value = match.value;
+      text.value = match.label;
+    }
+    if (chip.dataset.key === 'section') alignStation();
+  });
+  if (blocked) {
+    event.preventDefault();
+    chipsEl.querySelectorAll('input:disabled').forEach(input => {
+      input.disabled = false;
+    });
+  }
+});

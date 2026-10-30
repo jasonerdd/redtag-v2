@@ -430,6 +430,16 @@ a:hover {
   margin-left: auto;
 }
 
+.unit-issues {
+  overflow: visible;
+}
+
+.inline-close td {
+  background: #f7f8fa;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
 .unit-lookup-msg {
   font-size: 0.875rem;
   margin-top: 0.3rem;

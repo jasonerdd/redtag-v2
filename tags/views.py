@@ -16,8 +16,8 @@ from .models import (
     RedTag, Station, IssueType, Employee, Vehicle, AuditLog, EolCheck,
     Section, VehicleModel, Dealer,
 )
-from .forms import RedTagForm, UnitForm, UnitFilterForm, EolCheckForm
-from .audit import log_red_tag_action
+from .forms import RedTagForm, UnitForm, EolCheckForm
+from .audit import log_receiving_action, log_red_tag_action
 from .receiving import (
     ParsedRow,
     apply_receiving_rows,
@@ -38,6 +38,17 @@ class DepartmentLandingView(LoginRequiredMixin, TemplateView):
     template_name = 'tags/landing.html'
 
 
+RECENT_ENTRY_SESSION_KEY = 'redtag_recent_entry'
+
+RECEIVING_FILTERS = [
+    {'key': 'customer', 'label': 'Customer', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'model', 'label': 'Model', 'kind': 'choice', 'placeholder': 'Type to search'},
+    {'key': 'lot', 'label': 'Lot', 'kind': 'ajax', 'placeholder': 'Type a lot', 'min': 2, 'suggest': 'lot'},
+    {'key': 'chassis', 'label': 'Chassis', 'kind': 'ajax', 'placeholder': 'Type a chassis', 'min': 3, 'suggest': 'chassis'},
+    {'key': 'date_from', 'label': 'From', 'kind': 'date', 'placeholder': ''},
+    {'key': 'date_to', 'label': 'To', 'kind': 'date', 'placeholder': ''},
+]
+
 HISTORY_FILTERS = [
     {'key': 'status', 'label': 'Status', 'kind': 'choice', 'placeholder': 'Type to search'},
     {'key': 'section', 'label': 'Section', 'kind': 'choice', 'placeholder': 'Type to search'},
@@ -50,6 +61,66 @@ HISTORY_FILTERS = [
     {'key': 'date_to', 'label': 'To', 'kind': 'date', 'placeholder': ''},
     {'key': 'q', 'label': 'Search', 'kind': 'ajax', 'placeholder': 'Chassis, model, lot, issue', 'min': 2, 'suggest': 'search'},
 ]
+
+
+def model_customer_lookups():
+    return {
+        'model': [
+            {'value': str(row.id), 'label': row.name}
+            for row in VehicleModel.objects.order_by('name')
+        ],
+        'customer': [
+            {'value': str(row.id), 'label': row.name}
+            for row in Dealer.objects.order_by('name')
+        ],
+    }
+
+
+def filter_menu_context(request, catalog, lookups, reset_url):
+    chips = []
+    for spec in catalog:
+        value = (request.GET.get(spec['key']) or '').strip()
+        if not value:
+            continue
+        chip = {**spec, 'value': value, 'display': value}
+        if spec['kind'] == 'choice':
+            chip['display'] = next(
+                (opt['label'] for opt in lookups.get(spec['key'], []) if opt['value'] == value),
+                value,
+            )
+        chips.append(chip)
+    query = request.GET.copy()
+    query.pop('page', None)
+    return {
+        'filter_catalog': catalog,
+        'filter_lookups': lookups,
+        'filter_chips': chips,
+        'active_filter_keys': [chip['key'] for chip in chips],
+        'filter_query': query.urlencode(),
+        'filter_reset_url': reset_url,
+    }
+
+
+def recent_redtag_initial(session):
+    """Section, station, and staff ID from the last tag saved in this login."""
+    recent = session.get(RECENT_ENTRY_SESSION_KEY) or {}
+    initial = {}
+    section_id = recent.get('section')
+    station_id = recent.get('station')
+    employee_no = (recent.get('raised_by_employee_no') or '').strip()
+    if section_id:
+        section = Section.objects.filter(pk=section_id, show_in_form=True).first()
+        if section:
+            initial['section'] = section.pk
+            if station_id:
+                station = Station.objects.filter(
+                    pk=station_id, section=section, show_in_form=True,
+                ).first()
+                if station:
+                    initial['station'] = station.pk
+    if employee_no and Employee.objects.filter(employee_no=employee_no, active=True).exists():
+        initial['raised_by_employee_no'] = employee_no
+    return initial
 
 
 class VehicleListView(LoginRequiredMixin, ListView):
@@ -129,26 +200,12 @@ class VehicleListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        lookups = self._filter_lookups()
-        chips = []
-        for spec in HISTORY_FILTERS:
-            value = (self.request.GET.get(spec['key']) or '').strip()
-            if not value:
-                continue
-            chip = {**spec, 'value': value, 'display': value}
-            if spec['kind'] == 'choice':
-                chip['display'] = next(
-                    (opt['label'] for opt in lookups.get(spec['key'], []) if opt['value'] == value),
-                    value,
-                )
-            chips.append(chip)
-        context['filter_catalog'] = HISTORY_FILTERS
-        context['filter_lookups'] = lookups
-        context['filter_chips'] = chips
-        context['active_filter_keys'] = [chip['key'] for chip in chips]
-        query = self.request.GET.copy()
-        query.pop('page', None)
-        context['filter_query'] = query.urlencode()
+        context.update(filter_menu_context(
+            self.request,
+            HISTORY_FILTERS,
+            self._filter_lookups(),
+            reverse('redtag-list'),
+        ))
         return context
 
     def _filter_lookups(self):
@@ -157,7 +214,8 @@ class VehicleListView(LoginRequiredMixin, ListView):
             .select_related('section')
             .order_by('section__code', 'name')
         )
-        return {
+        lookups = model_customer_lookups()
+        lookups.update({
             'status': [
                 {'value': RedTag.STATUS_PENDING, 'label': 'Pending'},
                 {'value': RedTag.STATUS_CLOSED, 'label': 'Closed'},
@@ -175,15 +233,8 @@ class VehicleListView(LoginRequiredMixin, ListView):
                 }
                 for row in stations
             ],
-            'model': [
-                {'value': str(row.id), 'label': row.name}
-                for row in VehicleModel.objects.order_by('name')
-            ],
-            'customer': [
-                {'value': str(row.id), 'label': row.name}
-                for row in Dealer.objects.order_by('name')
-            ],
-        }
+        })
+        return lookups
 
 
 class VehicleDetailView(LoginRequiredMixin, DetailView):
@@ -221,10 +272,18 @@ class RedTagCreateView(LoginRequiredMixin, CreateView):
     def get_initial(self):
         initial = super().get_initial()
         initial.setdefault('date_raised', timezone.localdate())
+        for key, value in recent_redtag_initial(self.request.session).items():
+            initial.setdefault(key, value)
         return initial
 
     def form_valid(self, form):
         response = super().form_valid(form)
+        raised_by = self.object.raised_by
+        self.request.session[RECENT_ENTRY_SESSION_KEY] = {
+            'section': self.object.section_id,
+            'station': self.object.station_id,
+            'raised_by_employee_no': raised_by.employee_no if raised_by else '',
+        }
         log_red_tag_action(self.request, self.object, AuditLog.ACTION_CREATED)
         messages.success(self.request, 'Red tag saved. You can enter another one below.')
         return response
@@ -245,6 +304,17 @@ class RedTagUpdateView(LoginRequiredMixin, UpdateView):
         return response
 
 
+def _close_redirect(request, redtag):
+    nxt = (request.POST.get('next') or '').strip()
+    if nxt and url_has_allowed_host_and_scheme(
+        nxt,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(nxt)
+    return redirect('redtag-detail', pk=redtag.pk)
+
+
 @login_required
 def close_redtag(request, pk):
     redtag = get_object_or_404(RedTag, pk=pk)
@@ -252,7 +322,7 @@ def close_redtag(request, pk):
         employee_no = (request.POST.get('verified_by_employee_no') or '').strip()
         if not employee_no:
             messages.error(request, 'Enter who verified/cleared this tag.')
-            return redirect('redtag-detail', pk=pk)
+            return _close_redirect(request, redtag)
 
         try:
             verified_by = Employee.objects.get(employee_no=employee_no, active=True)
@@ -261,7 +331,7 @@ def close_redtag(request, pk):
                 request,
                 f'No active staff member found with ID "{employee_no}".',
             )
-            return redirect('redtag-detail', pk=pk)
+            return _close_redirect(request, redtag)
 
         redtag.status = RedTag.STATUS_CLOSED
         redtag.closing_date = timezone.localdate()
@@ -272,7 +342,7 @@ def close_redtag(request, pk):
         redtag.save()
         log_red_tag_action(request, redtag, AuditLog.ACTION_CLOSED)
         messages.success(request, f'Red tag #{redtag.pk} closed.')
-    return redirect('redtag-detail', pk=pk)
+    return _close_redirect(request, redtag)
 
 
 @login_required
@@ -566,7 +636,12 @@ class ReceivedUnitListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['filter_form'] = UnitFilterForm(self.request.GET or None)
+        context.update(filter_menu_context(
+            self.request,
+            RECEIVING_FILTERS,
+            model_customer_lookups(),
+            reverse('unit-list'),
+        ))
         return context
 
 
@@ -578,6 +653,7 @@ class UnitCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         self.object = form.save(user=self.request.user)
+        log_receiving_action(self.request, self.object, AuditLog.ACTION_CREATED)
         messages.success(
             self.request,
             f'Unit {self.object.chassis_no} received successfully.',
@@ -595,6 +671,7 @@ class UnitUpdateView(LoginRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         self.object = form.save(user=self.request.user)
+        log_receiving_action(self.request, self.object, AuditLog.ACTION_UPDATED)
         messages.success(self.request, f'Unit {self.object.chassis_no} updated.')
         return redirect(self.get_success_url())
 
@@ -642,7 +719,7 @@ def receiving_preview(request):
             messages.info(request, 'Upload cancelled.')
             return redirect('receiving-upload')
 
-        result = apply_receiving_rows(rows, user=request.user)
+        result = apply_receiving_rows(rows, user=request.user, request=request)
         request.session.pop('receiving_preview', None)
         messages.success(
             request,
@@ -674,9 +751,14 @@ class AuditLogListView(LoginRequiredMixin, ListView):
     template_name = 'tags/audit_list.html'
     context_object_name = 'logs'
     paginate_by = 50
+    module = AuditLog.MODULE_REDTAG
+    action_choices = AuditLog.ACTION_CHOICES
 
     def get_queryset(self):
-        qs = AuditLog.objects.select_related('user', 'red_tag').all()
+        qs = (
+            AuditLog.objects.filter(module=self.module)
+            .select_related('user', 'red_tag', 'vehicle')
+        )
         action = self.request.GET.get('action')
         chassis = self.request.GET.get('chassis')
         q = self.request.GET.get('q')
@@ -694,17 +776,33 @@ class AuditLogListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['action_choices'] = AuditLog.ACTION_CHOICES
+        context['action_choices'] = self.action_choices
         context['selected_action'] = self.request.GET.get('action', '')
         context['chassis'] = self.request.GET.get('chassis', '')
         context['query'] = self.request.GET.get('q', '')
         return context
 
 
+class ReceivingAuditLogListView(AuditLogListView):
+    template_name = 'tags/receiving_audit_list.html'
+    module = AuditLog.MODULE_RECEIVING
+    action_choices = AuditLog.RECEIVING_ACTION_CHOICES
+
+
 class AuditLogDetailView(LoginRequiredMixin, DetailView):
     model = AuditLog
     template_name = 'tags/audit_detail.html'
     context_object_name = 'log'
+
+    def get_queryset(self):
+        return AuditLog.objects.filter(module=AuditLog.MODULE_REDTAG)
+
+
+class ReceivingAuditLogDetailView(AuditLogDetailView):
+    template_name = 'tags/receiving_audit_detail.html'
+
+    def get_queryset(self):
+        return AuditLog.objects.filter(module=AuditLog.MODULE_RECEIVING)
 
 
 def csrf_failure(request, reason=''):

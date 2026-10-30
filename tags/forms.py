@@ -159,7 +159,18 @@ class RedTagForm(forms.ModelForm):
                 visible_station, section_id=existing_section
             )
         else:
-            self.fields['station'].queryset = Station.objects.none()
+            # A repeat entry prefills section from the session before the form is bound.
+            section_id = self.initial.get('section')
+            try:
+                section_id = int(section_id) if section_id else None
+            except (ValueError, TypeError):
+                section_id = None
+            if section_id:
+                self.fields['station'].queryset = Station.objects.filter(
+                    visible_station, section_id=section_id
+                )
+            else:
+                self.fields['station'].queryset = Station.objects.none()
 
         self.fields['category'].queryset = Category.objects.all()
 
@@ -402,30 +413,6 @@ class EolCheckForm(forms.ModelForm):
                 'shower_test', 'air_conditioning', 'diagnosis',
             )
         }
-
-
-class UnitFilterForm(forms.Form):
-    customer = forms.ModelChoiceField(
-        queryset=Dealer.objects.all(),
-        required=False,
-        empty_label='Select an option',
-        label='Customer',
-    )
-    model = forms.ModelChoiceField(
-        queryset=VehicleModel.objects.all(),
-        required=False,
-        empty_label='Select an option',
-    )
-    lot = forms.CharField(required=False, label='Lot')
-    chassis = forms.CharField(required=False, label='Chassis No.')
-    date_from = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
-    date_to = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            css = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
-            field.widget.attrs.setdefault('class', css)
 
 
 class RedTagFilterForm(forms.Form):

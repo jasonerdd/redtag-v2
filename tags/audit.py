@@ -42,6 +42,16 @@ def snapshot_red_tag(redtag):
     }
 
 
+def _actor(request):
+    user = getattr(request, 'user', None) if request else None
+    username = ''
+    if user is not None and getattr(user, 'is_authenticated', False):
+        username = user.get_username()
+    else:
+        user = None
+    return user, username
+
+
 def log_red_tag_action(request, redtag, action):
     details = snapshot_red_tag(redtag)
     chassis = details.get('chassis_no') or ''
@@ -49,18 +59,54 @@ def log_red_tag_action(request, redtag, action):
         f"{action.title()} red tag #{redtag.pk} for chassis {chassis} "
         f"({details.get('status') or '—'})"
     )
-    user = getattr(request, 'user', None) if request else None
-    username = ''
-    if user is not None and getattr(user, 'is_authenticated', False):
-        username = user.get_username()
+    user, username = _actor(request)
 
     return AuditLog.objects.create(
+        module=AuditLog.MODULE_REDTAG,
         action=action,
-        user=user if user is not None and user.is_authenticated else None,
+        user=user,
         username=username,
         red_tag=redtag,
         red_tag_id_snapshot=redtag.pk,
         chassis_no=chassis,
+        summary=summary,
+        details=details,
+        ip_address=_client_ip(request),
+    )
+
+
+def snapshot_vehicle(vehicle):
+    return {
+        'vehicle_id': vehicle.pk,
+        'chassis_no': vehicle.chassis_no,
+        'customer': vehicle.dealer.name if vehicle.dealer_id else '',
+        'model': vehicle.model.name if vehicle.model_id else '',
+        'vehicle_type': vehicle.vehicle_type,
+        'lot': vehicle.lot,
+        'engine_no': vehicle.engine_no,
+        'arrival_date': vehicle.arrival_date.isoformat() if vehicle.arrival_date else None,
+        'colour': vehicle.colour,
+        'bond_entry': vehicle.bond_entry,
+        'receiving_status': vehicle.receiving_status,
+    }
+
+
+def log_receiving_action(request, vehicle, action, source='form'):
+    """Record a receiving form save or a row applied from a sheet."""
+    details = snapshot_vehicle(vehicle)
+    details['source'] = 'Receiving sheet' if source == 'sheet' else 'Form'
+    via = ' from a receiving sheet' if source == 'sheet' else ''
+    summary = f"{action.title()} unit {vehicle.chassis_no}{via}"
+    user, username = _actor(request)
+
+    return AuditLog.objects.create(
+        module=AuditLog.MODULE_RECEIVING,
+        action=action,
+        user=user,
+        username=username,
+        vehicle=vehicle,
+        vehicle_id_snapshot=vehicle.pk,
+        chassis_no=vehicle.chassis_no,
         summary=summary,
         details=details,
         ip_address=_client_ip(request),

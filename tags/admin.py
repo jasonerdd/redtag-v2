@@ -135,14 +135,15 @@ class RedTagAdmin(ImportExportModelAdmin):
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = [
-        'timestamp', 'action', 'username', 'chassis_no',
-        'red_tag_id_snapshot', 'ip_address',
+        'timestamp', 'module', 'action', 'username', 'chassis_no',
+        'red_tag_id_snapshot', 'vehicle_id_snapshot', 'ip_address',
     ]
-    list_filter = ['action', 'timestamp']
+    list_filter = ['module', 'action', 'timestamp']
     search_fields = ['username', 'chassis_no', 'summary', 'red_tag_id_snapshot']
     readonly_fields = [
-        'action', 'timestamp', 'user', 'username', 'red_tag',
-        'red_tag_id_snapshot', 'chassis_no', 'summary', 'details', 'ip_address',
+        'module', 'action', 'timestamp', 'user', 'username', 'red_tag',
+        'red_tag_id_snapshot', 'vehicle', 'vehicle_id_snapshot',
+        'chassis_no', 'summary', 'details', 'ip_address',
     ]
     date_hierarchy = 'timestamp'
 

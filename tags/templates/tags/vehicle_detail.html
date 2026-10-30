@@ -34,7 +34,7 @@
 
 <div class="panel">
   <h2 class="h6 text-uppercase text-muted mb-3">Issues for this unit ({{ redtags|length }})</h2>
-  <div class="table-responsive">
+  <div class="table-responsive unit-issues">
     <table class="table table-hover align-middle mb-0">
       <thead>
         <tr>
@@ -69,8 +69,36 @@
           <td class="text-nowrap">
             <a href="{% url 'redtag-detail' tag.pk %}" class="btn btn-sm btn-outline-secondary">View</a>
             <a href="{% url 'redtag-update' tag.pk %}" class="btn btn-sm btn-outline-dark">Edit</a>
+            {% if tag.status == 'P' %}
+            <button type="button" class="btn btn-sm btn-success" data-close-toggle="{{ tag.pk }}" aria-expanded="false" aria-controls="close-row-{{ tag.pk }}">Close</button>
+            {% endif %}
           </td>
         </tr>
+        {% if tag.status == 'P' %}
+        <tr id="close-row-{{ tag.pk }}" class="inline-close" hidden>
+          <td colspan="9">
+            <form method="post" action="{% url 'redtag-close' tag.pk %}" class="row g-2 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <div class="col-md-4 position-relative">
+                <label class="form-label mb-1" for="verified-by-{{ tag.pk }}">Cleared / Verified by</label>
+                <input type="text" name="verified_by_employee_no" id="verified-by-{{ tag.pk }}"
+                       class="form-control form-control-sm verified-by-input" required autocomplete="off"
+                       placeholder="Type staff ID">
+                <div class="chassis-suggest" hidden></div>
+                <div class="unit-lookup-msg"></div>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label mb-1" for="remarks-{{ tag.pk }}">Remarks</label>
+                <input type="text" name="remarks" id="remarks-{{ tag.pk }}" class="form-control form-control-sm" value="{{ tag.remarks }}">
+              </div>
+              <div class="col-md-3">
+                <button type="submit" class="btn btn-success btn-sm">Mark as Closed</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
         {% empty %}
         <tr><td colspan="9" class="text-muted">No issues recorded for this unit.</td></tr>
         {% endfor %}
@@ -78,4 +106,120 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[ch]);
+  }
+
+  function bindEmployeeLookup(input) {
+    const wrap = input.parentElement;
+    const box = wrap.querySelector('.chassis-suggest');
+    const msg = wrap.querySelector('.unit-lookup-msg');
+    let timer = null;
+    let active = -1;
+    let results = [];
+
+    function hide() {
+      if (!box) return;
+      box.hidden = true;
+      box.innerHTML = '';
+      active = -1;
+    }
+
+    function pick(item) {
+      input.value = item.employee_no;
+      if (msg) {
+        msg.textContent = item.full_name || '';
+        msg.className = 'unit-lookup-msg ok';
+      }
+      hide();
+    }
+
+    function show(items) {
+      results = items || [];
+      if (!box || !results.length) {
+        hide();
+        return;
+      }
+      box.innerHTML = results.map(item =>
+        '<button type="button">' + esc(item.employee_no) +
+        (item.full_name ? ' · ' + esc(item.full_name) : '') + '</button>'
+      ).join('');
+      box.hidden = false;
+      active = -1;
+      [...box.querySelectorAll('button')].forEach((button, index) => {
+        button.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          pick(results[index]);
+        });
+      });
+    }
+
+    async function fetchEmployees() {
+      const value = input.value.trim();
+      if (value.length < 2) {
+        hide();
+        return;
+      }
+      try {
+        const response = await fetch('{% url "ajax-employee-suggest" %}?q=' + encodeURIComponent(value));
+        const data = await response.json();
+        show(data.results || []);
+      } catch (err) {
+        hide();
+      }
+    }
+
+    input.addEventListener('input', () => {
+      if (msg) {
+        msg.textContent = '';
+        msg.className = 'unit-lookup-msg';
+      }
+      clearTimeout(timer);
+      timer = setTimeout(fetchEmployees, 200);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (!box || box.hidden) return;
+      const buttons = [...box.querySelectorAll('button')];
+      if (!buttons.length) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        active = Math.min(active + 1, buttons.length - 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        active = Math.max(active - 1, 0);
+      } else if (event.key === 'Enter' && active >= 0) {
+        event.preventDefault();
+        pick(results[active]);
+        return;
+      } else if (event.key === 'Escape') {
+        hide();
+        return;
+      } else {
+        return;
+      }
+      buttons.forEach((button, index) => button.classList.toggle('active', index === active));
+    });
+    input.addEventListener('blur', () => setTimeout(hide, 150));
+  }
+
+  document.querySelectorAll('.verified-by-input').forEach(bindEmployeeLookup);
+  document.querySelectorAll('[data-close-toggle]').forEach(button => {
+    button.addEventListener('click', () => {
+      const row = document.getElementById('close-row-' + button.dataset.closeToggle);
+      if (!row) return;
+      row.hidden = !row.hidden;
+      button.setAttribute('aria-expanded', row.hidden ? 'false' : 'true');
+      if (!row.hidden) {
+        const input = row.querySelector('.verified-by-input');
+        if (input) input.focus();
+      }
+    });
+  });
+</script>
 {% endblock %}

@@ -278,7 +278,21 @@ class AuditLog(models.Model):
         (ACTION_UPDATED, 'Updated'),
         (ACTION_CLOSED, 'Closed'),
     ]
+    RECEIVING_ACTION_CHOICES = [
+        (ACTION_CREATED, 'Created'),
+        (ACTION_UPDATED, 'Updated'),
+    ]
 
+    MODULE_REDTAG = 'REDTAG'
+    MODULE_RECEIVING = 'RECEIVING'
+    MODULE_CHOICES = [
+        (MODULE_REDTAG, 'Red Tag'),
+        (MODULE_RECEIVING, 'Receiving'),
+    ]
+
+    module = models.CharField(
+        max_length=20, choices=MODULE_CHOICES, default=MODULE_REDTAG, db_index=True,
+    )
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
     user = models.ForeignKey(
@@ -291,6 +305,11 @@ class AuditLog(models.Model):
         related_name='audit_logs',
     )
     red_tag_id_snapshot = models.PositiveIntegerField(null=True, blank=True)
+    vehicle = models.ForeignKey(
+        Vehicle, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='audit_logs',
+    )
+    vehicle_id_snapshot = models.PositiveIntegerField(null=True, blank=True)
     chassis_no = models.CharField(max_length=50, blank=True, db_index=True)
     summary = models.TextField(blank=True)
     details = models.JSONField(default=dict, blank=True)
@@ -305,4 +324,7 @@ class AuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.get_action_display()} · tag #{self.red_tag_id_snapshot} · {self.timestamp:%Y-%m-%d %H:%M}"
+        when = f"{self.timestamp:%Y-%m-%d %H:%M}"
+        if self.module == self.MODULE_RECEIVING:
+            return f"{self.get_action_display()} · {self.chassis_no or 'unit'} · {when}"
+        return f"{self.get_action_display()} · tag #{self.red_tag_id_snapshot} · {when}"
