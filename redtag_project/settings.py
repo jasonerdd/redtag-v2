@@ -110,3 +110,6 @@ LOGOUT_REDIRECT_URL = 'login'
 CSRF_FAILURE_VIEW = 'tags.views.csrf_failure'
 
 IMPORT_EXPORT_USE_TRANSACTIONS = True
+from deploy_settings import apply_production_settings 
+
+apply_production_settings(globals())
